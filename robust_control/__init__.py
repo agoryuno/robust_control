@@ -62,6 +62,7 @@ def get_M_hat_b(Ys, mus, device=None):
     """
     Returns the estimator of Y: M_hat
     """
+    print ("get_M_hat_b: ", device)
     hat_p = compute_hat_p_b(Ys, device=device)
     
     # fill in missing values
