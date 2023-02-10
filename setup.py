@@ -12,8 +12,8 @@ setup(
     author='Alexander Goryunov',
     author_email='alex.goryunov@gmail.com',
     description='A PyTorch imlpementation of the "robust" synthetic control algorithm',
-    long_description=long_description,
-    long_description_content_type="text/markdown",
+    #long_description=long_description,
+    #long_description_content_type="text/markdown",
     url='https://github.com/agoryuno/robust_control/new/main',
     packages=["robust_control"],
     classifiers=[
