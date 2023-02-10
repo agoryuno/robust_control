@@ -192,3 +192,79 @@ def calc_rmspe(fact, control, preint):
     pre = np.mean( (fact[:preint] - control[:preint])**2)
     post = np.mean( (fact[preint:] - control[preint:])**2)
     return post/pre
+
+
+def estimate_weights_b(Y1, Y0, etas):
+    assert len(etas) == Y0.size()[0]
+    res = svd(Y0, full_matrices=True)
+    
+    U, Vh, S = res.U, res.Vh, res.S
+    
+    D = torch.zeros(Y0.size(), dtype=torch.float64)
+    a = torch.div(S, torch.sub(torch.square(S), torch.square(etas)))
+    
+    
+    for i in range(a.size()[0]):
+        D[i, :Y0.size()[2], :] = torch.diag(a[i])
+    return U @ D @ Vh @ Y1
+    
+
+def calc_control_b(price_mat, treated_i, etas, mus):
+    batch_size = len(etas)*len(mus)
+    
+    bound_mat, a, b = bind_data(price_mat)
+    
+    Y0, Y1 = get_ys(bound_mat, treated_i)
+    
+    Y1_t = torch.zeros(size=(batch_size, price_mat.shape[1], 1), dtype=torch.float64)
+    Y0_t = torch.zeros(size=(batch_size, price_mat.shape[0]-1, price_mat.shape[1]), dtype=torch.float64)
+    Y0_hats = np.array([get_M_hat(Y0, mu) for mu in mus])
+    for i in range(batch_size):
+        for Y0_hat in Y0_hats:
+            Y0_t[i, :, :] = torch.from_numpy(Y0_hat).to(torch.float64)
+            Y1_t[i, :, :] = torch.from_numpy(Y1.T).to(torch.float64)
+
+    assert isinstance(etas, list)
+    etas = etas*len(mus)
+    etas = np.array(etas)
+    etas = np.reshape(etas, (etas.shape[0], 1))
+    etas = torch.Tensor(etas).to(torch.float64)
+    vs = estimate_weights_b(Y1_t, Y0_t, etas)
+    
+    Y1_hat = (Y0_t.mT@vs)
+    Y1_hat = unbind_data(Y1_hat, a, b)
+    Y0_t = unbind_data(Y0_t, a, b)
+    return Y1_hat, Y0_t, vs
+
+
+def loss_fn(Y1s, Y1_hats):
+    return torch.sum(torch.square(torch.sub(Y1s, Y1_hats)), 1)
+
+
+def make_Y1s(orig_mat, i, n):
+    """
+    Makes an `n by k by j` tensor by repeating
+    `orig_mat[i]` n times, with `orig_mat[i]`
+    having dimensions `k by j`
+    """
+    mat_t = torch.Tensor(orig_mat[i])
+    mat_t = torch.reshape(mat_t, (mat_t.size()[0], 1))
+    return mat_t.repeat(n, 1, 1)
+
+
+def get_control(orig_mat, treated_i, eta_n, mu_n):
+    """
+    Given the matrix of values 'orig_mat' and the row index 
+    'treated_i', computes synthetic controls for each combination
+    of `eta` and `mu` for the respective numbers of each `eta_n` and 
+    `mu_n`.
+    
+    Returns a tensor of dimensions `eta_n*mu_n by orig_mat.shape[1] by 1`.
+    The resulting tensor can be passed to `loss_fn()` to calculate losses
+    against a tensor created with `make_Y1s()`.
+    """
+    etas = np.logspace(-2, 3, eta_n).tolist()
+    mus = [compute_mu(orig_mat, treated_i, w=w) for w in np.linspace(0.1, 1., mu_n)]
+    Y1_hats, Y0s, vs = calc_control_b(orig_mat, treated_i, etas, mus)
+    Y1s = make_Y1s(orig_mat, treated_i, Y1_hats.size()[0])
+    return Y1_hats[loss_fn(Y1s, Y1_hats).argmin(), :, :]
