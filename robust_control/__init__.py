@@ -332,4 +332,7 @@ def get_control(orig_mat, treated_i, eta_n, mu_n, device=None):
     mus = [compute_mu(orig_mat, treated_i, w=w) for w in np.linspace(0.1, 1., mu_n)]
     Y1_hats, _, _ = calc_control_b(orig_mat, treated_i, etas, mus, device=device)
     Y1s = make_Y1s(orig_mat, treated_i, Y1_hats.size()[0])
+    if device:
+        Y1s = Y1s.to(device)
+        Y1_hats = Y1_hats.to(device)
     return Y1_hats[loss_fn(Y1s, Y1_hats).argmin(), :, :]
