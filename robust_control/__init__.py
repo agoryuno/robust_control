@@ -60,7 +60,7 @@ def get_M_hat_b(Ys, mus):
     Ys = torch.nan_to_num(Ys)
 
     # compute the SVD of $Y$
-    res = svd(Ys, full_matrices=True)
+    res = tsvd(Ys, full_matrices=True)
     
     u,s,v = res.U, res.S, res.Vh
 
