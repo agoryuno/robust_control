@@ -252,7 +252,7 @@ def calc_rmspe(fact, control, preint):
     return post/pre
 
 
-def estimate_weights_b(Y1, Y0, etas):
+def estimate_weights_b(Y1, Y0, etas, device=None):
     assert len(etas) == Y0.size()[0]
     res = tsvd(Y0, full_matrices=True)
     
@@ -293,7 +293,7 @@ def calc_control_b(orig_mat, treated_i, etas, mus, device=None):
     etas = torch.Tensor(etas).to(torch.float64)
     if device:
         etas = etas.to(device)
-    vs = estimate_weights_b(Y1_t, Y0_t, etas)
+    vs = estimate_weights_b(Y1_t, Y0_t, etas, device=device)
     
     Y1_hat = (Y0_t.mT@vs)
     Y1_hat = unbind_data(Y1_hat, a, b)
