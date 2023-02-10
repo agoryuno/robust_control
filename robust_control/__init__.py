@@ -261,11 +261,11 @@ def estimate_weights_b(Y1, Y0, etas):
     
     U, Vh, S = res.U, res.Vh, res.S
     
-    D = torch.zeros(Y0.size())
+    D = torch.zeros_like(Y0)
     a = torch.div(S, torch.sub(torch.square(S), torch.square(etas)))
     
     for i in range(a.size(0)):
-        D[i, :Y0.size()[2], :] = torch.diag(a[i])
+        D[i, :Y0.size(2), :] = torch.diag(a[i])
     print (U.device, D.device, Vh.device, Y1.device)
     return U @ D @ Vh @ Y1.mT
     
