@@ -281,6 +281,7 @@ def calc_control_b(orig_mat, treated_i, etas, mus, device=None):
     Y1_t = torch.from_numpy(Y1.T).repeat(batch_size, 1, 1).to(torch.float64)
     if device:
         Y1_t = Y1_t.to(device)
+        Y0_t = Y0_t.to(device)
 
     assert isinstance(etas, list)
     etas = etas*len(mus)
@@ -324,7 +325,6 @@ def get_control(orig_mat, treated_i, eta_n, mu_n, device=None):
     parameters $eta$ and $mu$.
     """
 
-    print (device)
     etas = np.logspace(-2, 3, eta_n).tolist()
     mus = [compute_mu(orig_mat, treated_i, w=w) for w in np.linspace(0.1, 1., mu_n)]
     Y1_hats, _, _ = calc_control_b(orig_mat, treated_i, etas, mus, device=device)
