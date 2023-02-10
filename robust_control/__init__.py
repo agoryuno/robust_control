@@ -328,7 +328,7 @@ def prepare_data(orig_mat, treated_i, etas, mus):
     return Y1_t, Y0_t, etas, a, b
 
     
-def get_control(orig_mat, treated_i, eta_n, mu_n, cuda=False):
+def get_control(orig_mat, treated_i, eta_n=10, mu_n=3, cuda=False):
     """
     Given the matrix of values 'orig_mat' and the row index 
     'treated_i', computes synthetic controls for each combination
@@ -370,4 +370,4 @@ if __name__ == "__main__":
     eta_n = 10
     mu_n = 3
 
-    get_control(price_mat, treated_i, eta_n, mu_n, cuda=True)
+    get_control(price_mat, treated_i, eta_n, mu_n, cuda=False)
