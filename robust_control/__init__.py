@@ -326,7 +326,7 @@ def prepare_data(orig_mat, treated_i, etas, mus, device=None):
     Y0, Y1 = get_ys_b(bound_mat, treated_i)
 
     mus = torch.Tensor(np.array(mus))
-    mus = mus.view( (orig_mat.size(1),1))
+    mus = mus.view( (orig_mat.shape[1], 1))
 
     y0 = torch.from_numpy(Y0).repeat(len(mus),1,1)
     Y0_t = get_M_hat_b(y0, mus, device=device).repeat(len(etas), 1, 1)
