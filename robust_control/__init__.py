@@ -105,7 +105,7 @@ def get_M_hat(Y, mu=0.):
 
 
 def estimate_weights(Y1, Y0, eta=0.6):
-    res = tsvd(Y0, full_matrices=True)
+    res = svd(Y0, full_matrices=True)
 
     D = torch.zeros(Y0.size())
     D[:Y0.size()[1], :] = torch.diag(torch.div(res.S, torch.sub(torch.square(res.S), eta**2)))
@@ -240,7 +240,7 @@ def calc_rmspe(fact, control, preint):
 
 def estimate_weights_b(Y1, Y0, etas):
     assert len(etas) == Y0.size()[0]
-    res = svd(Y0, full_matrices=True)
+    res = tsvd(Y0, full_matrices=True)
     
     U, Vh, S = res.U, res.Vh, res.S
     
