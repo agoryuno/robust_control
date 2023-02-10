@@ -323,6 +323,8 @@ def get_control(orig_mat, treated_i, eta_n, mu_n, device=None):
     the synthetic control calculated with the best found values of 
     parameters $eta$ and $mu$.
     """
+
+    print (device)
     etas = np.logspace(-2, 3, eta_n).tolist()
     mus = [compute_mu(orig_mat, treated_i, w=w) for w in np.linspace(0.1, 1., mu_n)]
     Y1_hats, _, _ = calc_control_b(orig_mat, treated_i, etas, mus, device=device)
