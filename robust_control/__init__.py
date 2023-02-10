@@ -266,7 +266,6 @@ def estimate_weights_b(Y1, Y0, etas):
     
     for i in range(a.size(0)):
         D[i, :Y0.size(2), :] = torch.diag(a[i])
-    print (U.device, D.device, Vh.device, Y1.device)
     return U @ D @ Vh @ Y1.mT
     
 
@@ -306,16 +305,6 @@ def calc_control_b(Y1_t, Y0_t, etas, a, b):
 def loss_fn(Y1s, Y1_hats):
     return torch.sum(torch.square(torch.sub(Y1s, Y1_hats)), 1)
 
-
-def make_Y1s(orig_mat, i, n):
-    """
-    Makes an `n by k by j` tensor by repeating
-    `orig_mat[i]` n times, with `orig_mat[i]`
-    having dimensions `k by j`
-    """
-    mat_t = torch.Tensor(orig_mat[i])
-    mat_t = torch.reshape(mat_t, (mat_t.size()[0], 1))
-    return mat_t.repeat(n, 1, 1)
 
 
 def prepare_data(orig_mat, treated_i, etas, mus):
@@ -366,8 +355,8 @@ def get_control(orig_mat, treated_i, eta_n, mu_n, cuda=False):
 
     Y1_hats, _, _ = calc_control_b(Y1_t, Y0_t, etas, a, b)
 
-    Y1s = make_Y1s(orig_mat, treated_i, Y1_hats.size()[0])
-    min_idx = loss_fn(Y1s, Y1_hats).argmin()  
+    Y1s = unbind_data(Y1_t, a, b)
+    min_idx = loss_fn(Y1s.mT, Y1_hats).argmin()  
     res = Y1_hats[min_idx, :, :]
     return res
 
