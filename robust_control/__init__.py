@@ -266,6 +266,7 @@ def estimate_weights_b(Y1, Y0, etas):
     
     for i in range(a.size(0)):
         D[i, :Y0.size()[2], :] = torch.diag(a[i])
+    print (U.device, D.device, Vh.device, Y1.device)
     return U @ D @ Vh @ Y1.mT
     
 
