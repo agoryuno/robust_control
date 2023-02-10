@@ -9,7 +9,7 @@ import cvxpy as cvx
 
 
 def bind_data(X):
-    a, b = X.nanmin(), X.nanmax()
+    a, b = np.nanmin(X), np.nanmax(X)
     return (X - (a+b)/2.) / ((b-a)/2.), a, b
 
 
@@ -45,10 +45,42 @@ def compute_hat_p_b(Ys):
     
     total_els = torch.numel(Ys[0, :, :])
     ps = torch.div(have_vals.to(torch.float32), float(total_els))
-    ns = torch.Tensor([1/((Ys.size()[1]-1)*T)]*ps.size()[0])
+    ns = torch.Tensor([1/((Ys.size(1)-1)*T)]*ps.size(0))
     hat_ps = torch.maximum(ps, ns)
     return hat_ps
+
+
+def get_M_hat_b(Ys, mus):
+    """
+    Returns the estimator of Y: M_hat
+    """
+    hat_p = compute_hat_p_b(Ys)
     
+    # fill in missing values
+    Ys = torch.nan_to_num(Ys)
+
+    # compute the SVD of $Y$
+    res = svd(Ys, full_matrices=True)
+    
+    u,s,v = res.U, res.S, res.Vh
+
+    # Remove singular values that are below $\mu$
+    # by setting them to zero
+    mus = torch.Tensor(np.array(mus).reshape( (s.size(0),1)))
+    s[s <= mus] = 0.
+
+    # Make the singular values matrix
+    smat = torch.zeros(Ys.size())
+    b = torch.eye(s.size(1))
+    c = s.unsqueeze(2).expand(*s.size(), s.size(1))
+    smat[:, :c.size(2), :] = c * b
+    smat = smat.to(torch.float64)
+
+    # build the estimator of Y
+    M_hat = u @ (smat @ v)
+    m = torch.permute((1/hat_p).repeat(M_hat.size(2), 1, 1), (2,1,0))
+    return m*M_hat
+
 
 def get_M_hat(Y, mu=0.):
     """
@@ -207,16 +239,15 @@ def calc_rmspe(fact, control, preint):
 
 
 def estimate_weights_b(Y1, Y0, etas):
-    assert etas.size()[0] == Y0.size()[0]
-    res = tsvd(Y0, full_matrices=True)
+    assert len(etas) == Y0.size()[0]
+    res = svd(Y0, full_matrices=True)
     
     U, Vh, S = res.U, res.Vh, res.S
     
     D = torch.zeros(Y0.size(), dtype=torch.float64)
     a = torch.div(S, torch.sub(torch.square(S), torch.square(etas)))
     
-    
-    for i in range(a.size()[0]):
+    for i in range(a.size(0)):
         D[i, :Y0.size()[2], :] = torch.diag(a[i])
     return U @ D @ Vh @ Y1
     
@@ -227,16 +258,11 @@ def calc_control_b(orig_mat, treated_i, etas, mus, denoise=True):
     bound_mat, a, b = bind_data(orig_mat)
     
     Y0, Y1 = get_ys(bound_mat, treated_i)
+
     
-    Y1_t = torch.zeros(size=(batch_size, bound_mat.shape[1], 1), 
-        dtype=torch.float64)
-    Y0_t = torch.zeros(size=(batch_size, bound_mat.shape[0]-1, 
-        bound_mat.shape[1]), dtype=torch.float64)
-    Y0_hats = np.array([get_M_hat(Y0, mu) for mu in mus])
-    for i in range(batch_size):
-        for Y0_hat in Y0_hats:
-            Y0_t[i, :, :] = torch.from_numpy(Y0_hat).to(torch.float64)
-            Y1_t[i, :, :] = torch.from_numpy(Y1.T).to(torch.float64)
+    Y0_t = get_M_hat_b(torch.from_numpy(Y0).repeat(len(mus),1,1).to(torch.float64), 
+                       mus).repeat(len(etas), 1, 1)
+    Y1_t = torch.from_numpy(Y1.T).repeat(batch_size, 1, 1).to(torch.float64)
 
     assert isinstance(etas, list)
     etas = etas*len(mus)
@@ -270,12 +296,12 @@ def get_control(orig_mat, treated_i, eta_n, mu_n):
     """
     Given the matrix of values 'orig_mat' and the row index 
     'treated_i', computes synthetic controls for each combination
-    of `eta` and `mu` for the respective numbers of each `eta_n` and 
+    of `eta` and `mu` for the respective numbers of `eta_n` and 
     `mu_n`.
     
-    Returns a tensor of dimensions `eta_n*mu_n by orig_mat.shape[1] by 1`.
-    The resulting tensor can be passed to `loss_fn()` to calculate losses
-    against a tensor created with `make_Y1s()`.
+    Returns a tensor of dimensions `orig_mat.size()[1] by 1` that contains
+    the synthetic control calculated with the best found values of 
+    parameters $eta$ and $mu$.
     """
     etas = np.logspace(-2, 3, eta_n).tolist()
     mus = [compute_mu(orig_mat, treated_i, w=w) for w in np.linspace(0.1, 1., mu_n)]
