@@ -269,6 +269,7 @@ def estimate_weights_b(Y1, Y0, etas):
     
 
 def calc_control_b(orig_mat, treated_i, etas, mus, device=None):
+    print ("calc_control_b: ", device)
     batch_size = len(etas)*len(mus)
     
     bound_mat, a, b = bind_data(orig_mat)
