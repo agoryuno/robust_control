@@ -195,13 +195,10 @@ def calc_rmspe(fact, control, preint):
 
 
 def estimate_weights_b(Y1, Y0, etas):
-    assert len(etas) == Y0.size()[0]
-    res = svd(Y0, full_matrices=True)
+    assert etas.size()[0] == Y0.size()[0]
+    res = tsvd(Y0, full_matrices=True)
     
-    if isinstance(res, tuple):
-        U, Vh, S = res
-    else:
-        U, Vh, S = res.U, res.Vh, res.S
+    U, Vh, S = res.U, res.Vh, res.S
     
     D = torch.zeros(Y0.size(), dtype=torch.float64)
     a = torch.div(S, torch.sub(torch.square(S), torch.square(etas)))
