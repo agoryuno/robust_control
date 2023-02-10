@@ -15,7 +15,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url='https://github.com/agoryuno/robust_control/new/main',
-    packages=find_packages("robust_control"),
+    packages=["robust_control"],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
