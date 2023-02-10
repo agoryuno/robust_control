@@ -9,7 +9,7 @@ import cvxpy as cvx
 
 
 def bind_data(X):
-    a, b = X.min(), X.max()
+    a, b = X.nanmin(), X.nanmax()
     return (X - (a+b)/2.) / ((b-a)/2.), a, b
 
 
@@ -37,6 +37,18 @@ def compute_hat_p(Y):
     p = have_vals/Y.size
     return np.maximum(p, 1/((Y.shape[0]-1)*T))
 
+def compute_hat_p_b(Ys):
+    # find the value of $\hat p$ in eq. (9) on page 8
+    have_vals = torch.sum(~torch.isnan(Ys), (1,2))
+    
+    T = Ys.size()[2]
+    
+    total_els = torch.numel(Ys[0, :, :])
+    ps = torch.div(have_vals.to(torch.float32), float(total_els))
+    ns = torch.Tensor([1/((Ys.size()[1]-1)*T)]*ps.size()[0])
+    hat_ps = torch.maximum(ps, ns)
+    return hat_ps
+    
 
 def get_M_hat(Y, mu=0.):
     """
@@ -209,15 +221,17 @@ def estimate_weights_b(Y1, Y0, etas):
     return U @ D @ Vh @ Y1
     
 
-def calc_control_b(price_mat, treated_i, etas, mus):
+def calc_control_b(orig_mat, treated_i, etas, mus, denoise=True):
     batch_size = len(etas)*len(mus)
     
-    bound_mat, a, b = bind_data(price_mat)
+    bound_mat, a, b = bind_data(orig_mat)
     
     Y0, Y1 = get_ys(bound_mat, treated_i)
     
-    Y1_t = torch.zeros(size=(batch_size, price_mat.shape[1], 1), dtype=torch.float64)
-    Y0_t = torch.zeros(size=(batch_size, price_mat.shape[0]-1, price_mat.shape[1]), dtype=torch.float64)
+    Y1_t = torch.zeros(size=(batch_size, bound_mat.shape[1], 1), 
+        dtype=torch.float64)
+    Y0_t = torch.zeros(size=(batch_size, bound_mat.shape[0]-1, 
+        bound_mat.shape[1]), dtype=torch.float64)
     Y0_hats = np.array([get_M_hat(Y0, mu) for mu in mus])
     for i in range(batch_size):
         for Y0_hat in Y0_hats:
