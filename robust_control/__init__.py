@@ -47,6 +47,7 @@ def compute_hat_p_b(Ys, device=None):
     ps = torch.div(have_vals.to(torch.float32), float(total_els))
     ns = torch.Tensor([1/((Ys.size(1)-1)*T)]*ps.size(0))
     if device:
+        ps = ps.to(device)
         ns = ns.to(device)
     hat_ps = torch.maximum(ps, ns)
     return hat_ps
