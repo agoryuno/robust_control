@@ -37,7 +37,7 @@ def compute_hat_p(Y):
     p = have_vals/Y.size
     return np.maximum(p, 1/((Y.shape[0]-1)*T))
 
-def compute_hat_p_b(Ys):
+def compute_hat_p_b(Ys, device=None):
     # find the value of $\hat p$ in eq. (9) on page 8
     have_vals = torch.sum(~torch.isnan(Ys), (1,2))
     
@@ -46,15 +46,17 @@ def compute_hat_p_b(Ys):
     total_els = torch.numel(Ys[0, :, :])
     ps = torch.div(have_vals.to(torch.float32), float(total_els))
     ns = torch.Tensor([1/((Ys.size(1)-1)*T)]*ps.size(0))
+    if device:
+        ns = ns.to(device)
     hat_ps = torch.maximum(ps, ns)
     return hat_ps
 
 
-def get_M_hat_b(Ys, mus):
+def get_M_hat_b(Ys, mus, device=None):
     """
     Returns the estimator of Y: M_hat
     """
-    hat_p = compute_hat_p_b(Ys)
+    hat_p = compute_hat_p_b(Ys, device=device)
     
     # fill in missing values
     Ys = torch.nan_to_num(Ys)
@@ -66,12 +68,19 @@ def get_M_hat_b(Ys, mus):
 
     # Remove singular values that are below $\mu$
     # by setting them to zero
-    mus = torch.Tensor(np.array(mus).reshape( (s.size(0),1)))
+    mus = torch.Tensor(np.array(mus))
+    if device:
+        mus = mus.to(device)
+    mus = mus.reshape( (s.size(0),1))
     s[s <= mus] = 0.
 
     # Make the singular values matrix
     smat = torch.zeros(Ys.size())
+    if device:
+        smat = smat.to(device)
     b = torch.eye(s.size(1))
+    if device:
+        b = b.to(device)
     c = s.unsqueeze(2).expand(*s.size(), s.size(1))
     smat[:, :c.size(2), :] = c * b
     smat = smat.to(torch.float64)
@@ -263,7 +272,7 @@ def calc_control_b(orig_mat, treated_i, etas, mus, device=None):
     if device:
         y0 = y0.to(device)
 
-    Y0_t = get_M_hat_b(y0, mus).repeat(len(etas), 1, 1)
+    Y0_t = get_M_hat_b(y0, mus).repeat(len(etas), 1, 1, device=device)
     Y1_t = torch.from_numpy(Y1.T).repeat(batch_size, 1, 1).to(torch.float64)
     if device:
         Y1_t = Y1_t.to(device)
@@ -311,6 +320,6 @@ def get_control(orig_mat, treated_i, eta_n, mu_n, device=None):
     """
     etas = np.logspace(-2, 3, eta_n).tolist()
     mus = [compute_mu(orig_mat, treated_i, w=w) for w in np.linspace(0.1, 1., mu_n)]
-    Y1_hats, Y0s, vs = calc_control_b(orig_mat, treated_i, etas, mus, device=device)
+    Y1_hats, _, _ = calc_control_b(orig_mat, treated_i, etas, mus, device=device)
     Y1s = make_Y1s(orig_mat, treated_i, Y1_hats.size()[0])
     return Y1_hats[loss_fn(Y1s, Y1_hats).argmin(), :, :]
