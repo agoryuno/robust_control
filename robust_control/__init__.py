@@ -252,23 +252,29 @@ def estimate_weights_b(Y1, Y0, etas):
     return U @ D @ Vh @ Y1
     
 
-def calc_control_b(orig_mat, treated_i, etas, mus, denoise=True):
+def calc_control_b(orig_mat, treated_i, etas, mus, device=None):
     batch_size = len(etas)*len(mus)
     
     bound_mat, a, b = bind_data(orig_mat)
     
     Y0, Y1 = get_ys(bound_mat, treated_i)
 
-    
-    Y0_t = get_M_hat_b(torch.from_numpy(Y0).repeat(len(mus),1,1).to(torch.float64), 
-                       mus).repeat(len(etas), 1, 1)
+    y0 = torch.from_numpy(Y0).repeat(len(mus),1,1).to(torch.float64)
+    if device:
+        y0 = y0.to(device)
+
+    Y0_t = get_M_hat_b(y0, mus).repeat(len(etas), 1, 1)
     Y1_t = torch.from_numpy(Y1.T).repeat(batch_size, 1, 1).to(torch.float64)
+    if device:
+        Y1_t = Y1_t.to(device)
 
     assert isinstance(etas, list)
     etas = etas*len(mus)
     etas = np.array(etas)
     etas = np.reshape(etas, (etas.shape[0], 1))
     etas = torch.Tensor(etas).to(torch.float64)
+    if device:
+        etas = etas.to(device)
     vs = estimate_weights_b(Y1_t, Y0_t, etas)
     
     Y1_hat = (Y0_t.mT@vs)
