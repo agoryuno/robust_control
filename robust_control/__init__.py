@@ -44,7 +44,10 @@ def compute_hat_p_b(Ys, device=None):
     T = Ys.size()[2]
     
     total_els = torch.numel(Ys[0, :, :])
-    ps = torch.div(have_vals.to(torch.float32), float(total_els))
+    if device:
+        total_els = total_els.to(device)
+
+    ps = torch.div(have_vals, float(total_els))
     ns = torch.Tensor([1/((Ys.size(1)-1)*T)]*ps.size(0))
     if device:
         ps = ps.to(device)
