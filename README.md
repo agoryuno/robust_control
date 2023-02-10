@@ -16,3 +16,20 @@ implements most of the optimizations suggested by Amjad et al for their Algorith
 The package is in a very early pre-alpha for now. That is to mean that it works correctly until a commit stops it from doing so until it works
 again :)
 
+# Installation
+
+No packages are provided yet, so installing directly from the repo is the only option:
+
+`pip install git+https://github.com/agoryuno/robust_control`
+
+# Usage
+
+The main entry point is the function `get_control(matrix, i, eta_n, mu_n=3, cuda=False)` with arguments:
+
+- `matrix` a $K \times N$ matrix where $K$ is the number of objects and $N$ is the number of observations,
+- `i` is the row containing the object you want to estimate a synthetic control for,
+- `eta_n` - the number of the ridge regression regularization parameter (often refered to also as $\alpha$ or $\lambda$) values to try, increasing this number may improve the fit but will make estimation take longer,
+- `mu_n` - (optional, default is 3) the number of $\mu$ values for the denoising phase to try, same rationale as with $\eta$ applies, except setting this to anything beyond 5 will be mostly useless,
+- cuda - (optional, default is False) set this to True to enable GPU acceleration, I find that CUDA provides a roughly two-fold increase in performance for a problem size of $K \times N \times \eta_N \times \mu_N \approx 1 000 000$ elements.
+
+On Google Colab with a Standard GPU the problem size above takes 150 ms on average to compute.
