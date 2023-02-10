@@ -58,7 +58,6 @@ def get_M_hat_b(Ys, mus, device=None):
     """
     Returns the estimator of Y: M_hat
     """
-    print ("get_M_hat_b: ", device)
     hat_p = compute_hat_p_b(Ys, device=device)
     
     # fill in missing values
@@ -267,7 +266,6 @@ def estimate_weights_b(Y1, Y0, etas, device=None):
     
 
 def calc_control_b(orig_mat, treated_i, etas, mus, device=None):
-    print ("calc_control_b: ", device)
     batch_size = len(etas)*len(mus)
     
     bound_mat, a, b = bind_data(orig_mat)
