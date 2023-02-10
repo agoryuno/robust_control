@@ -7,10 +7,18 @@ import torch
 
 import cvxpy as cvx
 
+def bind_data_b(X):
+    a, b = torch.min(X), torch.max(X)
+    return (X - (a+b)/2.) / ((b-a)/2.), a, b
+
 
 def bind_data(X):
     a, b = np.nanmin(X), np.nanmax(X)
     return (X - (a+b)/2.) / ((b-a)/2.), a, b
+
+
+def unbind_data_b(X, a, b):
+    return X * ((b-a)/2.) + ((a + b)/2.)
 
 
 def unbind_data(X, a, b):
@@ -37,7 +45,7 @@ def compute_hat_p(Y):
     p = have_vals/Y.size
     return np.maximum(p, 1/((Y.shape[0]-1)*T))
 
-def compute_hat_p_b(Ys, device=None):
+def compute_hat_p_b(Ys):
     # find the value of $\hat p$ in eq. (9) on page 8
     have_vals = torch.sum(~torch.isnan(Ys), (1,2))
     
@@ -47,18 +55,15 @@ def compute_hat_p_b(Ys, device=None):
 
     ps = torch.div(have_vals, float(total_els))
     ns = torch.Tensor([1/((Ys.size(1)-1)*T)]*ps.size(0))
-    if device:
-        ps = ps.to(device)
-        ns = ns.to(device)
     hat_ps = torch.maximum(ps, ns)
     return hat_ps
 
 
-def get_M_hat_b(Ys, mus, device=None):
+def get_M_hat_b(Ys, mus):
     """
     Returns the estimator of Y: M_hat
     """
-    hat_p = compute_hat_p_b(Ys, device=device)
+    hat_p = compute_hat_p_b(Ys)
     
     # fill in missing values
     Ys = torch.nan_to_num(Ys)
@@ -70,19 +75,12 @@ def get_M_hat_b(Ys, mus, device=None):
 
     # Remove singular values that are below $\mu$
     # by setting them to zero
-    mus = torch.Tensor(np.array(mus))
-    if device:
-        mus = mus.to(device)
-    mus = mus.reshape( (s.size(0),1))
+    
     s[s <= mus] = 0.
 
     # Make the singular values matrix
     smat = torch.zeros(Ys.size())
-    if device:
-        smat = smat.to(device)
     b = torch.eye(s.size(1))
-    if device:
-        b = b.to(device)
     c = s.unsqueeze(2).expand(*s.size(), s.size(1))
     smat[:, :c.size(2), :] = c * b
     smat = smat.to(torch.float64)
@@ -123,6 +121,13 @@ def estimate_weights(Y1, Y0, eta=0.6):
    
     v = res.U @ D @ res.Vh @ Y1.T
     return v.numpy()
+
+
+def get_ys_b(mat, treated_i):
+    Y0 = torch.cat((mat[:treated_i, :], mat[treated_i+1:, :]), 0)
+    Y1 = mat[treated_i, :]
+    Y1 = Y1.viewreshape(1, Y1.size(0))
+    return Y0, Y1
 
 
 def get_ys(price_mat, treated_i):
@@ -243,6 +248,7 @@ def clean_anomalies(vec, threshold=10):
     vec[i] = sign*(vec[mask].mean()+mult*vec[mask].std())
     return vec
 
+
 def calc_rmspe(fact, control, preint):
     pre = np.mean( (fact[:preint] - control[:preint])**2)
     post = np.mean( (fact[preint:] - control[preint:])**2)
@@ -311,6 +317,21 @@ def make_Y1s(orig_mat, i, n):
     mat_t = torch.reshape(mat_t, (mat_t.size()[0], 1))
     return mat_t.repeat(n, 1, 1)
 
+
+def prepare_data(orig_mat, treated_i, etas, mus, device=None):
+    orig_tensor = torch.Tensor(orig_mat)
+
+    batch_size = len(etas)*len(mus)
+    bound_mat, a, b = bind_data_b(orig_tensor)
+    Y0, Y1 = get_ys_b(bound_mat, treated_i)
+
+    mus = torch.Tensor(np.array(mus))
+    mus = mus.view( (orig_mat.size(1),1))
+
+    y0 = torch.from_numpy(Y0).repeat(len(mus),1,1)
+    Y0_t = get_M_hat_b(y0, mus, device=device).repeat(len(etas), 1, 1)
+
+    
 
 def get_control(orig_mat, treated_i, eta_n, mu_n, device=None):
     """
