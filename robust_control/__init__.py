@@ -41,6 +41,7 @@ def compute_hat_p_b(Ys, device=None):
     # find the value of $\hat p$ in eq. (9) on page 8
     have_vals = torch.sum(~torch.isnan(Ys), (1,2))
     
+    print (device)
     T = Ys.size(2)
     
     total_els = torch.numel(Ys[0, :, :])
