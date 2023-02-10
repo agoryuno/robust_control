@@ -298,7 +298,7 @@ def make_Y1s(orig_mat, i, n):
     return mat_t.repeat(n, 1, 1)
 
 
-def get_control(orig_mat, treated_i, eta_n, mu_n):
+def get_control(orig_mat, treated_i, eta_n, mu_n, device=None):
     """
     Given the matrix of values 'orig_mat' and the row index 
     'treated_i', computes synthetic controls for each combination
@@ -311,6 +311,6 @@ def get_control(orig_mat, treated_i, eta_n, mu_n):
     """
     etas = np.logspace(-2, 3, eta_n).tolist()
     mus = [compute_mu(orig_mat, treated_i, w=w) for w in np.linspace(0.1, 1., mu_n)]
-    Y1_hats, Y0s, vs = calc_control_b(orig_mat, treated_i, etas, mus)
+    Y1_hats, Y0s, vs = calc_control_b(orig_mat, treated_i, etas, mus, device=device)
     Y1s = make_Y1s(orig_mat, treated_i, Y1_hats.size()[0])
     return Y1_hats[loss_fn(Y1s, Y1_hats).argmin(), :, :]
