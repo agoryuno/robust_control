@@ -280,7 +280,7 @@ def calc_control_b(orig_mat, treated_i, etas, mus, device=None):
     if device:
         y0 = y0.to(device)
 
-    Y0_t = get_M_hat_b(y0, mus).repeat(len(etas), 1, 1, device=device)
+    Y0_t = get_M_hat_b(y0, mus, device=device).repeat(len(etas), 1, 1)
     Y1_t = torch.from_numpy(Y1.T).repeat(batch_size, 1, 1).to(torch.float64)
     if device:
         Y1_t = Y1_t.to(device)
