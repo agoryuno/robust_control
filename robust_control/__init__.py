@@ -126,7 +126,7 @@ def estimate_weights(Y1, Y0, eta=0.6):
 def get_ys_b(mat, treated_i):
     Y0 = torch.cat((mat[:treated_i, :], mat[treated_i+1:, :]), 0)
     Y1 = mat[treated_i, :]
-    Y1 = Y1.viewreshape(1, Y1.size(0))
+    Y1 = Y1.view(1, Y1.size(0))
     return Y0, Y1
 
 
