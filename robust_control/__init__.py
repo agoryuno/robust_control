@@ -83,7 +83,7 @@ def get_M_hat_b(Ys, mus):
     b = torch.eye(s.size(1))
     c = s.unsqueeze(2).expand(*s.size(), s.size(1))
     smat[:, :c.size(2), :] = c * b
-    smat = smat.to(torch.float64)
+    smat = smat
 
     # build the estimator of Y
     M_hat = u @ (smat @ v)
@@ -255,23 +255,21 @@ def calc_rmspe(fact, control, preint):
     return post/pre
 
 
-def estimate_weights_b(Y1, Y0, etas, device=None):
+def estimate_weights_b(Y1, Y0, etas):
     assert len(etas) == Y0.size()[0]
     res = tsvd(Y0, full_matrices=True)
     
     U, Vh, S = res.U, res.Vh, res.S
     
-    D = torch.zeros(Y0.size(), dtype=torch.float64)
+    D = torch.zeros(Y0.size())
     a = torch.div(S, torch.sub(torch.square(S), torch.square(etas)))
     
     for i in range(a.size(0)):
         D[i, :Y0.size()[2], :] = torch.diag(a[i])
-    if device:
-        D = D.to(device)
-    return U @ D @ Vh @ Y1
+    return U @ D @ Vh @ Y1.mT
     
 
-def calc_control_b(orig_mat, treated_i, etas, mus, device=None):
+def calc_control_b2(orig_mat, treated_i, etas, mus):
     batch_size = len(etas)*len(mus)
     
     bound_mat, a, b = bind_data(orig_mat)
@@ -279,29 +277,30 @@ def calc_control_b(orig_mat, treated_i, etas, mus, device=None):
     Y0, Y1 = get_ys(bound_mat, treated_i)
 
     y0 = torch.from_numpy(Y0).repeat(len(mus),1,1).to(torch.float64)
-    if device:
-        y0 = y0.to(device)
 
-    Y0_t = get_M_hat_b(y0, mus, device=device).repeat(len(etas), 1, 1)
+    Y0_t = get_M_hat_b(y0, mus).repeat(len(etas), 1, 1)
     Y1_t = torch.from_numpy(Y1.T).repeat(batch_size, 1, 1).to(torch.float64)
-    if device:
-        Y1_t = Y1_t.to(device)
-        Y0_t = Y0_t.to(device)
 
     assert isinstance(etas, list)
     etas = etas*len(mus)
     etas = np.array(etas)
     etas = np.reshape(etas, (etas.shape[0], 1))
     etas = torch.Tensor(etas).to(torch.float64)
-    if device:
-        etas = etas.to(device)
-    vs = estimate_weights_b(Y1_t, Y0_t, etas, device=device)
+    vs = estimate_weights_b(Y1_t, Y0_t, etas)
     
     Y1_hat = (Y0_t.mT@vs)
     Y1_hat = unbind_data(Y1_hat, a, b)
     Y0_t = unbind_data(Y0_t, a, b)
     return Y1_hat, Y0_t, vs
 
+
+def calc_control_b(Y1_t, Y0_t, etas, a, b):
+    vs = estimate_weights_b(Y1_t, Y0_t, etas)
+    
+    Y1_hat = (Y0_t.mT@vs)
+    Y1_hat = unbind_data(Y1_hat, a, b)
+    Y0_t = unbind_data(Y0_t, a, b)
+    return Y1_hat, Y0_t, vs
 
 def loss_fn(Y1s, Y1_hats):
     return torch.sum(torch.square(torch.sub(Y1s, Y1_hats)), 1)
@@ -318,22 +317,29 @@ def make_Y1s(orig_mat, i, n):
     return mat_t.repeat(n, 1, 1)
 
 
-def prepare_data(orig_mat, treated_i, etas, mus, device=None):
+def prepare_data(orig_mat, treated_i, etas, mus):
     orig_tensor = torch.Tensor(orig_mat)
 
     batch_size = len(etas)*len(mus)
+    etas_len = len(etas)
+
+    mus = torch.Tensor(np.array(mus))
+    mus = mus.reshape( (mus.size(0), 1))
+
+    etas = torch.Tensor(np.array(etas))
+    etas = etas.reshape( (etas.size(0), 1)).repeat(mus.size(0), 1)
+    
     bound_mat, a, b = bind_data_b(orig_tensor)
     Y0, Y1 = get_ys_b(bound_mat, treated_i)
 
-    mus = torch.Tensor(np.array(mus))
-    mus = mus.reshape( (orig_mat.shape[1], 1))
+    y0 = Y0.repeat(mus.size(0),1,1)
+    Y0_t = get_M_hat_b(y0, mus).repeat(etas_len, 1, 1)
+    Y1_t = Y1.repeat(batch_size, 1, 1)
 
-    y0 = torch.from_numpy(Y0).repeat(len(mus),1,1)
-    Y0_t = get_M_hat_b(y0, mus, device=device).repeat(len(etas), 1, 1)
+    return Y1_t, Y0_t, etas, a, b
 
     
-
-def get_control(orig_mat, treated_i, eta_n, mu_n, device=None):
+def get_control(orig_mat, treated_i, eta_n, mu_n, cuda=False):
     """
     Given the matrix of values 'orig_mat' and the row index 
     'treated_i', computes synthetic controls for each combination
@@ -347,9 +353,32 @@ def get_control(orig_mat, treated_i, eta_n, mu_n, device=None):
 
     etas = np.logspace(-2, 3, eta_n).tolist()
     mus = [compute_mu(orig_mat, treated_i, w=w) for w in np.linspace(0.1, 1., mu_n)]
-    Y1_hats, _, _ = calc_control_b(orig_mat, treated_i, etas, mus, device=device)
+    Y1_t, Y0_t, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus)
+
+    if cuda:
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        Y1_t = Y1_t.to(device)
+        Y0_t = Y0_t.to(device)
+        etas = etas.to(device)
+        a = a.to(device)
+        b = b.to(device)
+
+    Y1_hats, _, _ = calc_control_b(Y1_t, Y0_t, etas, a, b)
+
     Y1s = make_Y1s(orig_mat, treated_i, Y1_hats.size()[0])
-    if device:
-        Y1s = Y1s.to(device)
-        Y1_hats = Y1_hats.to(device)
-    return Y1_hats[loss_fn(Y1s, Y1_hats).argmin(), :, :]
+    min_idx = loss_fn(Y1s, Y1_hats).argmin()  
+    res = Y1_hats[min_idx, :, :]
+    return res
+
+
+if __name__ == "__main__":
+    import pickle
+
+    with open("price_mat.pkl", "rb") as f:
+        price_mat, _, _ = pickle.load(f)
+
+    treated_i = 0
+    eta_n = 10
+    mu_n = 3
+
+    get_control(price_mat, treated_i, eta_n, mu_n, cuda=True)
