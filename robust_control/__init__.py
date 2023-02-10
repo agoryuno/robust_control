@@ -198,8 +198,10 @@ def estimate_weights_b(Y1, Y0, etas):
     assert len(etas) == Y0.size()[0]
     res = svd(Y0, full_matrices=True)
     
-    print (type(res))
-    U, Vh, S = res.U, res.Vh, res.S
+    if isinstance(res, tuple):
+        U, Vh, S = res
+    else:
+        U, Vh, S = res.U, res.Vh, res.S
     
     D = torch.zeros(Y0.size(), dtype=torch.float64)
     a = torch.div(S, torch.sub(torch.square(S), torch.square(etas)))
