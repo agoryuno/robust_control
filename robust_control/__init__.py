@@ -306,7 +306,6 @@ def loss_fn(Y1s, Y1_hats):
     return torch.sum(torch.square(torch.sub(Y1s, Y1_hats)), 1)
 
 
-
 def prepare_data(orig_mat, treated_i, etas, mus):
     orig_tensor = torch.Tensor(orig_mat)
 
