@@ -332,10 +332,13 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=3, cuda=False):
 
     Y1_hats, _, _ = calc_control_b(Y1_t, Y0_t, etas, a, b)
 
-    Y1s = unbind_data(Y1_t, a, b)
-    min_idx = loss_fn(Y1s.mT, Y1_hats).argmin()  
+    Y1s = unbind_data(Y1_t, a, b).mT
+    min_idx = loss_fn(Y1s, Y1_hats).argmin()  
     res = Y1_hats[min_idx, :, :]
-    return res
+
+    # There's really no need to use the min_idx for the
+    # denoised original data, but we have it so why not use it
+    return res, Y1s[min_idx, :, :]
 
 
 if __name__ == "__main__":
@@ -348,4 +351,4 @@ if __name__ == "__main__":
     eta_n = 10
     mu_n = 3
 
-    get_control(price_mat, treated_i, eta_n, mu_n, cuda=False)
+    control, orig = get_control(price_mat, treated_i, eta_n, mu_n, cuda=False)
