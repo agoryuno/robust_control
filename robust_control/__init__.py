@@ -45,6 +45,7 @@ def compute_hat_p(Y):
     p = have_vals/Y.size
     return np.maximum(p, 1/((Y.shape[0]-1)*T))
 
+
 def compute_hat_p_b(Ys):
     # find the value of $\hat p$ in eq. (9) on page 8
     have_vals = torch.sum(~torch.isnan(Ys), (1,2))
@@ -57,38 +58,6 @@ def compute_hat_p_b(Ys):
     ns = torch.Tensor([1/((Ys.size(1)-1)*T)]*ps.size(0))
     hat_ps = torch.maximum(ps, ns)
     return hat_ps
-
-
-def get_M_hat_b(Ys, mus):
-    """
-    Returns the estimator of Y: M_hat
-    """
-    hat_p = compute_hat_p_b(Ys)
-    
-    # fill in missing values
-    Ys = torch.nan_to_num(Ys)
-
-    # compute the SVD of $Y$
-    res = tsvd(Ys, full_matrices=True)
-    
-    u,s,v = res.U, res.S, res.Vh
-
-    # Remove singular values that are below $\mu$
-    # by setting them to zero
-    
-    s[s <= mus] = 0.
-
-    # Make the singular values matrix
-    smat = torch.zeros(Ys.size())
-    b = torch.eye(s.size(1))
-    c = s.unsqueeze(2).expand(*s.size(), s.size(1))
-    smat[:, :c.size(2), :] = c * b
-    smat = smat
-
-    # build the estimator of Y
-    M_hat = u @ (smat @ v)
-    m = torch.permute((1/hat_p).repeat(M_hat.size(2), 1, 1), (2,1,0))
-    return m*M_hat
 
 
 def get_M_hat(Y, mu=0.):
@@ -255,44 +224,51 @@ def calc_rmspe(fact, control, preint):
     return post/pre
 
 
+def get_M_hat_b(Ys, mus):
+    """
+    Returns the estimator of Y: M_hat
+    """
+    hat_p = compute_hat_p_b(Ys)
+    
+    # fill in missing values
+    Ys = torch.nan_to_num(Ys)
+
+    # compute the SVD of $Y$
+    res = tsvd(Ys, full_matrices=True)
+    
+    u,s,v = res.U, res.S, res.Vh
+
+    # Remove singular values that are below $\mu$
+    # by setting them to zero
+    
+    s[s <= mus] = 0.
+
+    # Make the singular values matrix
+    smat = torch.zeros_like(Ys)
+    b = torch.eye(s.size(1))
+    c = s.unsqueeze(2).expand(*s.size(), s.size(1))
+    smat[:, :c.size(2), :] = c * b
+
+    # build the estimator of Y
+    M_hat = u @ (smat @ v)
+    m = torch.permute((1/hat_p).repeat(M_hat.size(2), 1, 1), (2,1,0))
+    return m*M_hat
+
+
 def estimate_weights_b(Y1, Y0, etas):
-    assert len(etas) == Y0.size()[0]
+    assert etas.size(0) == Y0.size(0)
     res = tsvd(Y0, full_matrices=True)
     
     U, Vh, S = res.U, res.Vh, res.S
     
     D = torch.zeros_like(Y0)
+    b = torch.eye(S.size(1))
     a = torch.div(S, torch.sub(torch.square(S), torch.square(etas)))
-    
-    for i in range(a.size(0)):
-        D[i, :Y0.size(2), :] = torch.diag(a[i])
+    c = a.unsqueeze(2).expand(*a.size(), a.size(1))
+    D[:, :c.size(2), :] = c * b
+
     return U @ D @ Vh @ Y1.mT
     
-
-def calc_control_b2(orig_mat, treated_i, etas, mus):
-    batch_size = len(etas)*len(mus)
-    
-    bound_mat, a, b = bind_data(orig_mat)
-    
-    Y0, Y1 = get_ys(bound_mat, treated_i)
-
-    y0 = torch.from_numpy(Y0).repeat(len(mus),1,1).to(torch.float64)
-
-    Y0_t = get_M_hat_b(y0, mus).repeat(len(etas), 1, 1)
-    Y1_t = torch.from_numpy(Y1.T).repeat(batch_size, 1, 1).to(torch.float64)
-
-    assert isinstance(etas, list)
-    etas = etas*len(mus)
-    etas = np.array(etas)
-    etas = np.reshape(etas, (etas.shape[0], 1))
-    etas = torch.Tensor(etas).to(torch.float64)
-    vs = estimate_weights_b(Y1_t, Y0_t, etas)
-    
-    Y1_hat = (Y0_t.mT@vs)
-    Y1_hat = unbind_data(Y1_hat, a, b)
-    Y0_t = unbind_data(Y0_t, a, b)
-    return Y1_hat, Y0_t, vs
-
 
 def calc_control_b(Y1_t, Y0_t, etas, a, b):
     vs = estimate_weights_b(Y1_t, Y0_t, etas)
@@ -301,6 +277,7 @@ def calc_control_b(Y1_t, Y0_t, etas, a, b):
     Y1_hat = unbind_data(Y1_hat, a, b)
     Y0_t = unbind_data(Y0_t, a, b)
     return Y1_hat, Y0_t, vs
+
 
 def loss_fn(Y1s, Y1_hats):
     return torch.sum(torch.square(torch.sub(Y1s, Y1_hats)), 1)
@@ -335,13 +312,14 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=3, cuda=False):
     of `eta` and `mu` for the respective numbers of `eta_n` and 
     `mu_n`.
     
-    Returns a tensor of dimensions `orig_mat.size()[1] by 1` that contains
-    the synthetic control calculated with the best found values of 
-    parameters $eta$ and $mu$.
+    Returns a tensor of dimensions `orig_mat.size()[1] by 1` 
+    that contains the synthetic control calculated with the best 
+    found values of parameters $eta$ and $mu$.
     """
 
     etas = np.logspace(-2, 3, eta_n).tolist()
-    mus = [compute_mu(orig_mat, treated_i, w=w) for w in np.linspace(0.1, 1., mu_n)]
+    mus = [compute_mu(orig_mat, treated_i, w=w) 
+        for w in np.linspace(0.1, 1., mu_n)]
     Y1_t, Y0_t, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus)
 
     if cuda:
