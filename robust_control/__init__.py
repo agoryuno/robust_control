@@ -210,7 +210,7 @@ def calc_control_b(Y1_t: torch.Tensor, Y0_t: torch.Tensor,
 
 
 #@torch.no_grad()
-torch.jit_script
+torch.jit.script
 def loss_fn(Y1s: torch.Tensor, Y1_hats: torch.Tensor):
     return torch.sum(torch.square(torch.sub(Y1s, Y1_hats)), 1)
 
@@ -240,8 +240,6 @@ def prepare_data(orig_mat, treated_i, etas, mus):
     return Y1_t, Y0_t, etas, a, b
 
 
-#@torch.no_grad()
-@torch.jit.script
 def get_control(orig_mat, treated_i, eta_n=10, mu_n=3, 
         cuda=False, parts=None):
     """
