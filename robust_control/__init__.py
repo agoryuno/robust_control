@@ -97,15 +97,20 @@ def compute_mu(price_mat, treated_i, preint_len=None, w=None):
     return (2 + w) * np.sqrt(price_mat.shape[1] * (sigma*p + p*(1-p)))
 
 
-def partition(price_mat, parts):
-    preint = price_mat.shape[1]
-    idx = [(i*(preint//parts), j*(preint // parts)) for i,j in zip(range(parts), range(1, 1+parts))]
+def partition(orig_tensor: torch.Tensor, parts: int):
+    full_len = orig_tensor.size(1)
+    idx = [(i*(full_len//parts), 
+            j*(full_len // parts)) 
+                for i,j in zip(range(parts), range(1, 1+parts))]
 
-    remain = preint % parts
+    remain = full_len % parts
     if remain > 0:
-        idx[-1] = (idx[-1][0], preint)
+        idx[-1] = (idx[-1][0], full_len)
     
-    return np.vstack([np.mean(price_mat[:, i:j], axis=1) for i,j in idx]).T
+    new_tensor = torch.zeros((orig_tensor.size(0), parts))
+    for i, (start, end) in enumerate(idx):
+        new_tensor[:, i] = orig_tensor[:, start:end].mean(1)
+    return new_tensor
 
 
 def clean_anomalies(vec, threshold=10):
@@ -193,8 +198,13 @@ def loss_fn(Y1s: torch.Tensor, Y1_hats: torch.Tensor):
     return torch.sum(torch.square(torch.sub(Y1s, Y1_hats)), 1)
 
 
-def prepare_data(orig_mat, treated_i, etas, mus):
+def prepare_data(orig_mat, treated_i, etas, mus, parts=None):
     orig_tensor = torch.Tensor(orig_mat)
+    
+    print (orig_tensor.size())
+    if parts:
+        orig_tensor = partition(orig_tensor, parts)
+        print (orig_tensor.size())
 
     batch_size = len(etas)*len(mus)
     etas_len = len(etas)
@@ -215,7 +225,8 @@ def prepare_data(orig_mat, treated_i, etas, mus):
     return Y1_t, Y0_t, etas, a, b
 
     
-def get_control(orig_mat, treated_i, eta_n=10, mu_n=3, cuda=False):
+def get_control(orig_mat, treated_i, eta_n=10, mu_n=3, 
+        cuda=False, parts=None):
     """
     Given the matrix of values 'orig_mat' and the row index 
     'treated_i', computes synthetic controls for each combination
@@ -232,7 +243,7 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=3, cuda=False):
     etas = np.logspace(-2, 3, eta_n).tolist()
     mus = [compute_mu(orig_mat, treated_i, w=w) 
         for w in np.linspace(0.1, 1., mu_n)]
-    Y1_t, Y0_t, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus)
+    Y1_t, Y0_t, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus, parts=parts)
 
     if cuda:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -263,6 +274,6 @@ if __name__ == "__main__":
     eta_n = 10
     mu_n = 3
 
-    control, orig = get_control(price_mat, treated_i, eta_n, mu_n, cuda=False)
+    control, orig = get_control(price_mat, treated_i, eta_n, mu_n, cuda=False, parts=10)
     print (control/orig)
     print (control)
