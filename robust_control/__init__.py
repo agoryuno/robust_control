@@ -177,7 +177,7 @@ def estimate_weights_b(Y1: torch.Tensor, Y0: torch.Tensor, etas: torch.Tensor):
 
     return U @ D @ Vh @ Y1.mT
     
-
+@torch.jit.script
 def calc_control_b(Y1_t: torch.Tensor, Y0_t: torch.Tensor, 
                    etas: torch.Tensor, a: float, b: float):
     vs = estimate_weights_b(Y1_t, Y0_t, etas)
