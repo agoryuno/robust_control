@@ -136,7 +136,8 @@ def calc_rmspe(fact, control, preint):
     return post/pre
 
 
-def get_M_hat_b(Ys, mus):
+@torch.jit.script
+def get_M_hat_b(Ys: torch.Tensor, mus: torch.Tensor):
     """
     Returns the estimator of Y: M_hat
     """
@@ -158,7 +159,7 @@ def get_M_hat_b(Ys, mus):
     # Make the singular values matrix
     smat = torch.zeros_like(Ys)
     b = torch.eye(s.size(1))
-    c = s.unsqueeze(2).expand(*s.size(), s.size(1))
+    c = s.unsqueeze(2).expand(s.size(0), s.size(1), s.size(1))
     smat[:, :c.size(2), :] = c * b
 
     # build the estimator of Y
