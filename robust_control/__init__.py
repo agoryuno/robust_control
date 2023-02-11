@@ -60,38 +60,6 @@ def compute_hat_p_b(Ys):
     return hat_ps
 
 
-def get_M_hat(Y, mu=0.):
-    """
-    Returns the estimator of Y: M_hat
-    """
-    hat_p = compute_hat_p(Y)
-    # fill in the missing values as per eq. (7) on page 8
-    Y[np.isnan(Y)] = 0
-    
-    # compute the SVD of $Y$
-    u,s,v = svd(Y, full_matrices=True)
-
-    # Remove singular values that are below $\mu$
-    s = s[s >= mu]
-    
-    smat = np.zeros((Y.shape[0], Y.shape[1]))
-    smat[:s.shape[0], :s.shape[0]] = np.diag(s)
-    
-    # build the estimator of Y
-    M_hat = np.dot(u, np.dot(smat, v))
-    return (1/hat_p)*M_hat
-
-
-def estimate_weights(Y1, Y0, eta=0.6):
-    res = svd(Y0, full_matrices=True)
-
-    D = torch.zeros(Y0.size())
-    D[:Y0.size()[1], :] = torch.diag(torch.div(res.S, torch.sub(torch.square(res.S), eta**2)))
-   
-    v = res.U @ D @ res.Vh @ Y1.T
-    return v.numpy()
-
-
 def get_ys_b(mat, treated_i):
     Y0 = torch.cat((mat[:treated_i, :], mat[treated_i+1:, :]), 0)
     Y1 = mat[treated_i, :]
@@ -104,28 +72,6 @@ def get_ys(price_mat, treated_i):
     Y1 = price_mat[treated_i, :]
     Y1 = np.reshape(Y1, (1, Y1.shape[0]))
     return Y0, Y1
-    
-
-def denoise(price_mat, mu):
-    bound_mat, a, b = bind_data(price_mat)
-    M_hat = get_M_hat(bound_mat, mu)
-    return unbind_data(M_hat, a, b)
-
-
-def calc_control(price_mat, treated_i, preint_len=None, eta=0.0, mu=0.4):
-    preint_len = preint_len if preint_len else price_mat.shape[1]
-    bound_mat, a, b = bind_data(price_mat)
-    
-    Y0, Y1 = get_ys(bound_mat, treated_i)
-    M_hat = get_M_hat(Y0, mu)
-    
-    v = estimate_weights(torch.Tensor(Y1[:, :preint_len]), torch.Tensor(M_hat[:, :preint_len]), eta)
-    
-    Y1_hat = (M_hat.T@v).T
-
-    hat_data = np.vstack((M_hat[:treated_i, :], Y1_hat, M_hat[treated_i:, :]))
-    hat_data = unbind_data(hat_data, a, b)
-    return hat_data, v
 
 
 def compute_sigma(price_mat, treated_i, preint_len=None):
@@ -147,42 +93,6 @@ def compute_mu(price_mat, treated_i, preint_len=None, w=None):
     if not w:
         w = np.random.uniform(0.1, 1)
     return (2 + w) * np.sqrt(price_mat.shape[1] * (sigma*p + p*(1-p)))
-
-
-def optimize_eta(price_mat, treated_i, preint=None, eta_num=10, 
-                  base_w=0.5, mu_tries=None,
-                  start=2):
-    assert start >= 2
-    etas= np.logspace(-2, 3, eta_num)
-    
-    def loss_fn(X, Y):
-        return cvx.pnorm(X - Y, p=2)**2
-    
-    min_loss = np.inf
-    
-    mus = [compute_mu(price_mat, treated_i, preint, base_w)]
-    if mu_tries:
-        mus = [compute_mu(price_mat, treated_i, preint, w) for w in np.linspace(0.1, 1., mu_tries)]
-    
-    best_eta = None
-    best_mu = None
-    for eta,mu in product(etas,mus):
-        loss = 0.
-        for i in range(start, price_mat.shape[1]):
-            try:
-                hat_data, _ = calc_control(price_mat, treated_i, 
-                                       preint_len=i-1, eta=eta, mu=mu)
-            except ValueError:
-                continue
-            Y_hat = hat_data[treated_i, i]
-            Y = price_mat[treated_i, i]
-            loss += loss_fn(Y_hat, Y).value
-        if loss < min_loss:
-            min_loss = loss
-            best_eta = eta
-            best_mu = mu
-            
-    return best_eta, best_mu
 
 
 def partition(price_mat, parts):
@@ -274,8 +184,8 @@ def calc_control_b(Y1_t, Y0_t, etas, a, b):
     vs = estimate_weights_b(Y1_t, Y0_t, etas)
     
     Y1_hat = (Y0_t.mT@vs)
-    Y1_hat = unbind_data(Y1_hat, a, b)
-    Y0_t = unbind_data(Y0_t, a, b)
+    Y1_hat = unbind_data_b(Y1_hat, a, b)
+    Y0_t = unbind_data_b(Y0_t, a, b)
     return Y1_hat, Y0_t, vs
 
 
@@ -334,7 +244,7 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=3, cuda=False):
 
     Y1_hats, _, _ = calc_control_b(Y1_t, Y0_t, etas, a, b)
 
-    Y1s = unbind_data(Y1_t, a, b).mT
+    Y1s = unbind_data_b(Y1_t, a, b).mT
     min_idx = loss_fn(Y1s, Y1_hats).argmin()  
     res = Y1_hats[min_idx, :, :]
 
@@ -354,3 +264,5 @@ if __name__ == "__main__":
     mu_n = 3
 
     control, orig = get_control(price_mat, treated_i, eta_n, mu_n, cuda=False)
+    print (control/orig)
+    print (control)
