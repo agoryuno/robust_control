@@ -176,7 +176,7 @@ def estimate_weights_b(Y1: torch.Tensor, Y0: torch.Tensor, etas: torch.Tensor):
     U, Vh, S = res.U, res.Vh, res.S
     
     D = torch.zeros_like(Y0)
-    b = torch.eye(S.size(1))
+    b = torch.eye(S.size(1), device=S.device)
     a = torch.div(S, torch.sub(torch.square(S), torch.square(etas)))
     c = a.unsqueeze(2).expand(a.size(0), a.size(1), a.size(1))
     D[:, :c.size(2), :] = c * b
