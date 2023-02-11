@@ -45,7 +45,8 @@ def compute_hat_p(Y):
     return np.maximum(p, 1/((Y.shape[0]-1)*T))
 
 
-def compute_hat_p_b(Ys):
+@torch.jit.script
+def compute_hat_p_b(Ys: torch.Tensor):
     # find the value of $\hat p$ in eq. (9) on page 8
     have_vals = torch.sum(~torch.isnan(Ys), (1,2))
     
@@ -59,7 +60,8 @@ def compute_hat_p_b(Ys):
     return hat_ps
 
 
-def get_ys_b(mat, treated_i):
+@torch.jit.script
+def get_ys_b(mat, treated_i: int):
     Y0 = torch.cat((mat[:treated_i, :], mat[treated_i+1:, :]), 0)
     Y1 = mat[treated_i, :]
     Y1 = Y1.view(1, Y1.size(0))
@@ -164,7 +166,8 @@ def get_M_hat_b(Ys, mus):
     return m*M_hat
 
 
-def estimate_weights_b(Y1, Y0, etas):
+@torch.jit.script
+def estimate_weights_b(Y1: torch.Tensor, Y0: torch.Tensor, etas: torch.Tensor):
     assert etas.size(0) == Y0.size(0)
     res = tsvd(Y0, full_matrices=True)
     
@@ -179,7 +182,8 @@ def estimate_weights_b(Y1, Y0, etas):
     return U @ D @ Vh @ Y1.mT
     
 
-def calc_control_b(Y1_t, Y0_t, etas, a, b):
+def calc_control_b(Y1_t: torch.Tensor, Y0_t: torch.Tensor, 
+                   etas: torch.Tensor, a: float, b: float):
     vs = estimate_weights_b(Y1_t, Y0_t, etas)
     
     Y1_hat = (Y0_t.mT@vs)
@@ -188,7 +192,8 @@ def calc_control_b(Y1_t, Y0_t, etas, a, b):
     return Y1_hat, Y0_t, vs
 
 
-def loss_fn(Y1s, Y1_hats):
+@torch.jit.script
+def loss_fn(Y1s: torch.Tensor, Y1_hats: torch.Tensor):
     return torch.sum(torch.square(torch.sub(Y1s, Y1_hats)), 1)
 
 
