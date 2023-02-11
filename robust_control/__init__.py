@@ -108,12 +108,6 @@ def partition(price_mat, parts):
     return np.vstack([np.mean(price_mat[:, i:j], axis=1) for i,j in idx]).T
 
 
-def filter_by_transactions(data, top_n=300):
-    a = data[["ticker", "transactions"]].groupby("ticker").sum().reset_index()
-    tickers = a.sort_values("transactions").iloc[-top_n:]["ticker"]
-    return data[data["ticker"].isin(tickers)]
-
-
 def clean_anomalies(vec, threshold=10):
     vec = vec.copy()
     stds = np.array([vec[:i].std() for i in range(1,vec.shape[0])])
