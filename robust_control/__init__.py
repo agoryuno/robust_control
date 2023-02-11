@@ -314,7 +314,9 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=3, cuda=False):
     
     Returns a tensor of dimensions `orig_mat.size()[1] by 1` 
     that contains the synthetic control calculated with the best 
-    found values of parameters $eta$ and $mu$.
+    found values of parameters $eta$ and $mu$, and a tensor with the
+    same dimensions, containing the denoised original data for observation
+    `treated_i`.
     """
 
     etas = np.logspace(-2, 3, eta_n).tolist()
