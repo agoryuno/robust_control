@@ -7,7 +7,9 @@ import torch
 
 import cvxpy as cvx
 
-def bind_data_b(X):
+
+@torch.jit.script
+def bind_data_b(X: torch.Tensor):
     a, b = torch.min(X), torch.max(X)
     return (X - (a+b)/2.) / ((b-a)/2.), a, b
 
@@ -17,6 +19,7 @@ def bind_data(X):
     return (X - (a+b)/2.) / ((b-a)/2.), a, b
 
 
+@torch.jit.script
 def unbind_data(X: torch.Tensor, a: float, b: float):
     return X * (b-a)/2. + (a + b)/2.
 
