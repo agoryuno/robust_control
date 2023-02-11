@@ -201,10 +201,8 @@ def loss_fn(Y1s: torch.Tensor, Y1_hats: torch.Tensor):
 def prepare_data(orig_mat, treated_i, etas, mus, parts=None):
     orig_tensor = torch.Tensor(orig_mat)
     
-    print (orig_tensor.size())
     if parts:
         orig_tensor = partition(orig_tensor, parts)
-        print (orig_tensor.size())
 
     batch_size = len(etas)*len(mus)
     etas_len = len(etas)
