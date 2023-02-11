@@ -17,10 +17,6 @@ def bind_data(X):
     return (X - (a+b)/2.) / ((b-a)/2.), a, b
 
 
-def unbind_data_b(X, a, b):
-    return X * ((b-a)/2.) + ((a + b)/2.)
-
-
 def unbind_data(X, a, b):
     return X * (b-a)/2. + (a + b)/2.
 
@@ -184,8 +180,8 @@ def calc_control_b(Y1_t, Y0_t, etas, a, b):
     vs = estimate_weights_b(Y1_t, Y0_t, etas)
     
     Y1_hat = (Y0_t.mT@vs)
-    Y1_hat = unbind_data_b(Y1_hat, a, b)
-    Y0_t = unbind_data_b(Y0_t, a, b)
+    Y1_hat = unbind_data(Y1_hat, a, b)
+    Y0_t = unbind_data(Y0_t, a, b)
     return Y1_hat, Y0_t, vs
 
 
@@ -244,7 +240,7 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=3, cuda=False):
 
     Y1_hats, _, _ = calc_control_b(Y1_t, Y0_t, etas, a, b)
 
-    Y1s = unbind_data_b(Y1_t, a, b).mT
+    Y1s = unbind_data(Y1_t, a, b).mT
     min_idx = loss_fn(Y1s, Y1_hats).argmin()  
     res = Y1_hats[min_idx, :, :]
 
