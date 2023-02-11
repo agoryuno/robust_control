@@ -251,7 +251,6 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=3,
     mus = [compute_mu(orig_mat, treated_i, w=w) 
         for w in np.linspace(0.1, 1., mu_n)]
     Y1_t, Y0_t, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus)
-    print (Y1_t.size(), Y0_t.size())
     if parts:
         Y1_t = partition(Y1_t, parts)
         Y0_t = partition(Y0_t, parts)
