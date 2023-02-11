@@ -8,7 +8,7 @@ import torch
 import cvxpy as cvx
 
 
-@torch.jit.script
+@torch.no_grad()
 def bind_data_b(X: torch.Tensor):
     a, b = torch.min(X), torch.max(X)
     return (X - (a+b)/2.) / ((b-a)/2.), a, b
@@ -19,7 +19,7 @@ def bind_data(X):
     return (X - (a+b)/2.) / ((b-a)/2.), a, b
 
 
-@torch.jit.script
+@torch.no_grad()
 def unbind_data(X: torch.Tensor, a: float, b: float):
     return X * (b-a)/2. + (a + b)/2.
 
@@ -45,7 +45,7 @@ def compute_hat_p(Y):
     return np.maximum(p, 1/((Y.shape[0]-1)*T))
 
 
-@torch.jit.script
+@torch.no_grad()
 def compute_hat_p_b(Ys: torch.Tensor):
     # find the value of $\hat p$ in eq. (9) on page 8
     have_vals = torch.sum(~torch.isnan(Ys), (1,2))
@@ -55,13 +55,12 @@ def compute_hat_p_b(Ys: torch.Tensor):
     total_els = torch.numel(Ys[0, :, :])
 
     ps = torch.div(have_vals, float(total_els))
-    #ns = torch.Tensor([1/((Ys.size(1)-1)*T)]*ps.size(0))
     ns = torch.full(ps.size(), 1/((Ys.size(1) - 1)*T))
     hat_ps = torch.maximum(ps, ns)
     return hat_ps
 
 
-@torch.jit.script
+@torch.no_grad()
 def get_ys_b(mat, treated_i: int):
     Y0 = torch.cat((mat[:treated_i, :], mat[treated_i+1:, :]), 0)
     Y1 = mat[treated_i, :]
@@ -97,19 +96,27 @@ def compute_mu(price_mat, treated_i, preint_len=None, w=None):
     return (2 + w) * np.sqrt(price_mat.shape[1] * (sigma*p + p*(1-p)))
 
 
+@torch.no_grad()
 def partition(orig_tensor: torch.Tensor, parts: int):
-    full_len = orig_tensor.size(1)
-    idx = [(i*(full_len//parts), 
-            j*(full_len // parts)) 
-                for i,j in zip(range(parts), range(1, 1+parts))]
+    full_len = orig_tensor.size(orig_tensor.dim()-1)
+    part_len = full_len // parts
+    #idx = [(i*part_len, 
+    #        j*part_len) 
+    #            for i,j in zip(range(parts), range(1, 1+parts))]
+
+    idx = [[i*(part_len - 1), part_len] for i in range(parts)]
 
     remain = full_len % parts
     if remain > 0:
-        idx[-1] = (idx[-1][0], full_len)
-    
-    new_tensor = torch.zeros((orig_tensor.size(0), parts))
+        #idx[-1] = (idx[-1][0], full_len)
+        idx[-1][1] = idx[-1][1]+remain
+
+    new_tensor = torch.zeros((orig_tensor.size(0), orig_tensor.size(1), parts), 
+        device=orig_tensor.device)
     for i, (start, end) in enumerate(idx):
-        new_tensor[:, i] = orig_tensor[:, start:end].mean(1)
+        #new_tensor[:, i] = orig_tensor[:, start:end].mean(-1)
+        t = torch.narrow(orig_tensor, -1, start, end).mean(-1)
+        new_tensor[:, :, i] = t
     return new_tensor
 
 
@@ -135,7 +142,7 @@ def calc_rmspe(fact, control, preint):
     return post/pre
 
 
-@torch.jit.script
+@torch.no_grad()
 def get_M_hat_b(Ys: torch.Tensor, mus: torch.Tensor):
     """
     Returns the estimator of Y: M_hat
@@ -167,7 +174,7 @@ def get_M_hat_b(Ys: torch.Tensor, mus: torch.Tensor):
     return m*M_hat
 
 
-@torch.jit.script
+@torch.no_grad()
 def estimate_weights_b(Y1: torch.Tensor, Y0: torch.Tensor, etas: torch.Tensor):
     assert etas.size(0) == Y0.size(0)
     res = tsvd(Y0, full_matrices=True)
@@ -182,7 +189,8 @@ def estimate_weights_b(Y1: torch.Tensor, Y0: torch.Tensor, etas: torch.Tensor):
 
     return U @ D @ Vh @ Y1.mT
     
-@torch.jit.script
+
+@torch.no_grad()
 def calc_control_b(Y1_t: torch.Tensor, Y0_t: torch.Tensor, 
                    etas: torch.Tensor, a: float, b: float):
     vs = estimate_weights_b(Y1_t, Y0_t, etas)
@@ -193,16 +201,15 @@ def calc_control_b(Y1_t: torch.Tensor, Y0_t: torch.Tensor,
     return Y1_hat, Y0_t, vs
 
 
-@torch.jit.script
+@torch.no_grad()
 def loss_fn(Y1s: torch.Tensor, Y1_hats: torch.Tensor):
     return torch.sum(torch.square(torch.sub(Y1s, Y1_hats)), 1)
 
 
-def prepare_data(orig_mat, treated_i, etas, mus, parts=None):
+def prepare_data(orig_mat, treated_i, etas, mus):
     orig_tensor = torch.Tensor(orig_mat)
     
-    if parts:
-        orig_tensor = partition(orig_tensor, parts)
+    
 
     batch_size = len(etas)*len(mus)
     etas_len = len(etas)
@@ -218,11 +225,13 @@ def prepare_data(orig_mat, treated_i, etas, mus, parts=None):
 
     y0 = Y0.repeat(mus.size(0),1,1)
     Y0_t = get_M_hat_b(y0, mus).repeat(etas_len, 1, 1)
-    Y1_t = Y1.repeat(batch_size, 1, 1)
+    Y1_t = Y1.expand(batch_size, Y1.size(0), Y1.size(1))
+    
 
     return Y1_t, Y0_t, etas, a, b
 
-    
+
+@torch.no_grad()   
 def get_control(orig_mat, treated_i, eta_n=10, mu_n=3, 
         cuda=False, parts=None):
     """
@@ -241,7 +250,11 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=3,
     etas = np.logspace(-2, 3, eta_n).tolist()
     mus = [compute_mu(orig_mat, treated_i, w=w) 
         for w in np.linspace(0.1, 1., mu_n)]
-    Y1_t, Y0_t, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus, parts=parts)
+    Y1_t, Y0_t, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus)
+    print (Y1_t.size(), Y0_t.size())
+    if parts:
+        Y1_t = partition(Y1_t, parts)
+        Y0_t = partition(Y0_t, parts)
 
     if cuda:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -251,7 +264,7 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=3,
         a = a.to(device)
         b = b.to(device)
 
-    Y1_hats, _, _ = calc_control_b(Y1_t, Y0_t, etas, a, b)
+    Y1_hats, _, vs = calc_control_b(Y1_t, Y0_t, etas, a, b)
 
     Y1s = unbind_data(Y1_t, a, b).mT
     min_idx = loss_fn(Y1s, Y1_hats).argmin()  
@@ -273,5 +286,3 @@ if __name__ == "__main__":
     mu_n = 3
 
     control, orig = get_control(price_mat, treated_i, eta_n, mu_n, cuda=False, parts=10)
-    print (control/orig)
-    print (control)
