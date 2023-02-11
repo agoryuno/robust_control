@@ -8,7 +8,8 @@ import torch
 import cvxpy as cvx
 
 
-@torch.no_grad()
+#@torch.no_grad()
+@torch.jit.script
 def bind_data_b(X: torch.Tensor):
     a, b = torch.min(X), torch.max(X)
     return (X - (a+b)/2.) / ((b-a)/2.), a, b
@@ -19,7 +20,8 @@ def bind_data(X):
     return (X - (a+b)/2.) / ((b-a)/2.), a, b
 
 
-@torch.no_grad()
+#@torch.no_grad()
+@torch.jit.script
 def unbind_data(X: torch.Tensor, a: float, b: float):
     return X * (b-a)/2. + (a + b)/2.
 
@@ -45,7 +47,8 @@ def compute_hat_p(Y):
     return np.maximum(p, 1/((Y.shape[0]-1)*T))
 
 
-@torch.no_grad()
+#@torch.no_grad()
+@torch.jit.script
 def compute_hat_p_b(Ys: torch.Tensor):
     # find the value of $\hat p$ in eq. (9) on page 8
     have_vals = torch.sum(~torch.isnan(Ys), (1,2))
@@ -60,7 +63,8 @@ def compute_hat_p_b(Ys: torch.Tensor):
     return hat_ps
 
 
-@torch.no_grad()
+#@torch.no_grad()
+@torch.jit.script
 def get_ys_b(mat, treated_i: int):
     Y0 = torch.cat((mat[:treated_i, :], mat[treated_i+1:, :]), 0)
     Y1 = mat[treated_i, :]
@@ -96,7 +100,8 @@ def compute_mu(price_mat, treated_i, preint_len=None, w=None):
     return (2 + w) * np.sqrt(price_mat.shape[1] * (sigma*p + p*(1-p)))
 
 
-@torch.no_grad()
+#@torch.no_grad()
+@torch.jit.script
 def partition(orig_tensor: torch.Tensor, parts: int):
     full_len = orig_tensor.size(orig_tensor.dim()-1)
     part_len = full_len // parts
@@ -142,7 +147,8 @@ def calc_rmspe(fact, control, preint):
     return post/pre
 
 
-@torch.no_grad()
+#@torch.no_grad()
+@torch.jit.script
 def get_M_hat_b(Ys: torch.Tensor, mus: torch.Tensor):
     """
     Returns the estimator of Y: M_hat
@@ -174,7 +180,8 @@ def get_M_hat_b(Ys: torch.Tensor, mus: torch.Tensor):
     return m*M_hat
 
 
-@torch.no_grad()
+#@torch.no_grad()
+@torch.jit.script
 def estimate_weights_b(Y1: torch.Tensor, Y0: torch.Tensor, etas: torch.Tensor):
     assert etas.size(0) == Y0.size(0)
     res = tsvd(Y0, full_matrices=True)
@@ -190,7 +197,8 @@ def estimate_weights_b(Y1: torch.Tensor, Y0: torch.Tensor, etas: torch.Tensor):
     return U @ D @ Vh @ Y1.mT
     
 
-@torch.no_grad()
+#@torch.no_grad()
+@torch.jit.script
 def calc_control_b(Y1_t: torch.Tensor, Y0_t: torch.Tensor, 
                    etas: torch.Tensor, a: float, b: float):
     vs = estimate_weights_b(Y1_t, Y0_t, etas)
@@ -201,7 +209,8 @@ def calc_control_b(Y1_t: torch.Tensor, Y0_t: torch.Tensor,
     return Y1_hat, Y0_t, vs
 
 
-@torch.no_grad()
+#@torch.no_grad()
+torch.jit_script
 def loss_fn(Y1s: torch.Tensor, Y1_hats: torch.Tensor):
     return torch.sum(torch.square(torch.sub(Y1s, Y1_hats)), 1)
 
@@ -231,7 +240,8 @@ def prepare_data(orig_mat, treated_i, etas, mus):
     return Y1_t, Y0_t, etas, a, b
 
 
-@torch.no_grad()   
+#@torch.no_grad()
+@torch.jit.script
 def get_control(orig_mat, treated_i, eta_n=10, mu_n=3, 
         cuda=False, parts=None):
     """
