@@ -32,4 +32,6 @@ The main entry point is the function `get_control(matrix, i, eta_n=10, mu_n=3, c
 - `mu_n` - (optional, default is 3) the number of $\mu$ values for the denoising phase to try, same rationale as with $\eta$ applies, except setting this to anything beyond 5 will be mostly useless,
 - cuda - (optional, default is False) set this to True to enable GPU acceleration, I find that CUDA provides a roughly two-fold increase in performance for a problem size of $K \times N \times \eta_N \times \mu_N \approx 1 000 000$ elements.
 
+The function returns a tuple with two $N \times 1$ vectors: the estimated synthetic control and the original denoised outcome values.
+
 On Google Colab with a Standard GPU the problem size above takes 150 ms on average to compute.
