@@ -55,7 +55,8 @@ def compute_hat_p_b(Ys: torch.Tensor):
     total_els = torch.numel(Ys[0, :, :])
 
     ps = torch.div(have_vals, float(total_els))
-    ns = torch.Tensor([1/((Ys.size(1)-1)*T)]*ps.size(0))
+    #ns = torch.Tensor([1/((Ys.size(1)-1)*T)]*ps.size(0))
+    ns = torch.full(ps.size(), 1/((Ys.size(1) - 1)*T))
     hat_ps = torch.maximum(ps, ns)
     return hat_ps
 
