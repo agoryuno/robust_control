@@ -149,7 +149,7 @@ def calc_rmspe(fact, control, preint):
 
 #@torch.no_grad()
 @torch.jit.script
-def get_M_hat_b(Ys: torch.Tensor, mus: torch.Tensor):
+def get_M_hat_b(Ys: torch.Tensor, mus: torch.Tensor, denoise: bool = True):
     """
     Returns the estimator of Y: M_hat
     """
@@ -166,7 +166,9 @@ def get_M_hat_b(Ys: torch.Tensor, mus: torch.Tensor):
     # Remove singular values that are below $\mu$
     # by setting them to zero
     
-    s[s <= mus] = 0.
+    # Disable if denoise is False
+    if denoise:
+        s[s <= mus] = 0.
 
     # Make the singular values matrix
     smat = torch.zeros_like(Ys)
@@ -215,7 +217,7 @@ def loss_fn(Y1s: torch.Tensor, Y1_hats: torch.Tensor):
     return torch.sum(torch.square(torch.sub(Y1s, Y1_hats)), 2)
 
 
-def prepare_data(orig_mat, treated_i, etas, mus):
+def prepare_data(orig_mat, treated_i, etas, mus, denoise=True):
     orig_tensor = torch.Tensor(orig_mat)
     
     batch_size = len(etas)*len(mus)
@@ -231,14 +233,14 @@ def prepare_data(orig_mat, treated_i, etas, mus):
     Y0, Y1 = get_ys_b(bound_mat, treated_i)
 
     y0 = Y0.repeat(mus.size(0),1,1)
-    Y0_t = get_M_hat_b(y0, mus).repeat(etas_len, 1, 1)
+    Y0_t = get_M_hat_b(y0, mus, denoise=denoise).repeat(etas_len, 1, 1)
     Y1_t = Y1.expand(batch_size, Y1.size(0), Y1.size(1))
 
     return Y1_t, Y0_t, etas, a, b
 
 
 def get_control(orig_mat, treated_i, eta_n=10, mu_n=3, 
-        cuda=False, parts=None):
+        cuda=False, parts=None, denoise=True):
     """
     Given the matrix of values 'orig_mat' and the row index 
     'treated_i', computes synthetic controls for each combination
@@ -255,7 +257,8 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=3,
     etas = np.logspace(-2, 3, eta_n).tolist()
     mus = [compute_mu(orig_mat, treated_i, w=w) 
         for w in np.linspace(0.1, 1., mu_n)]
-    Y1_o, Y0_o, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus)
+    Y1_o, Y0_o, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus, 
+            denoise=denoise)
     Y1_t, Y0_t = Y1_o, Y0_o
     if parts:
         Y1_t = partition(Y1_t, parts)
@@ -285,8 +288,6 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=3,
 
 
 # TODO: Forward-chaining
-# TODO: Restore partitioned data for output
-
 
 if __name__ == "__main__":
     import pickle
@@ -298,5 +299,5 @@ if __name__ == "__main__":
     eta_n = 10
     mu_n = 3
 
-    control, orig = get_control(price_mat, treated_i, eta_n, mu_n, cuda=False, parts=12)
+    control, orig = get_control(price_mat, treated_i, eta_n, mu_n, cuda=False, parts=12, denoise=False)
     print (control/orig)
