@@ -295,20 +295,17 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE,
 
     vs = estimate_weights_b(Y1_t, Y0_t, etas)
 
-    
-    
     Y1_eta = vs.mT @ Y0_o
     
     min_idx = loss_fn(Y1_o[:, :, train_i:cutoff], Y1_eta[:, :, train_i:cutoff]).argmin()
     
     Y1_n, Y0_n = _get_train_data(Y1_o[min_idx, :, :], Y0_o[min_idx, :, :], cutoff, parts)
+    Y1_n, Y0_n = Y1_n.unsqueeze(0), Y0_n.unsqueeze(0)
+    vs = estimate_weights_b(Y1_n, Y0_n, etas[min_idx].unsqueeze(0))
 
-    vs = estimate_weights_b(Y1_n.unsqueeze(0), Y0_n.unsqueeze(0), etas[min_idx].unsqueeze(0))
+    Y1_hats = unbind_data(vs.mT @ Y0_n, a, b)
+    Y1s = unbind_data(Y1_n, a, b)
 
-    Y1_hats = unbind_data(vs.mT @ Y0_o, a, b)
-    Y1s = unbind_data(Y1_o, a, b)
-
-    print (Y1_hats.size(), Y1s.size())
     assert (Y1_hats.size() == Y1s.size())
     res = Y1_hats[min_idx, :, :]
 
