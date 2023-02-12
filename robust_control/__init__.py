@@ -243,8 +243,8 @@ def prepare_data(orig_mat, treated_i, etas, mus, denoise=DEFAULT_DENOISE):
     return Y1_t, Y0_t, etas, a, b
 
 
-def get_control(orig_mat, treated_i, eta_n=10, mu_n=3, 
-        cuda=False, parts=DEFAULT_PART, denoise=DEFAULT_DENOISE):
+def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE, 
+        cuda=False, parts=DEFAULT_PART):
     """
     Given the matrix of values 'orig_mat' and the row index 
     'treated_i', computes synthetic controls for each combination
@@ -259,10 +259,13 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=3,
     """
 
     etas = np.logspace(-2, 3, eta_n).tolist()
-    mus = [compute_mu(orig_mat, treated_i, w=w) 
-        for w in np.linspace(0.1, 1., mu_n)]
-    Y1_o, Y0_o, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus, 
-            denoise=denoise)
+    mus = [0.5]
+    if mu_n:
+        mus = [compute_mu(orig_mat, treated_i, w=w) 
+            for w in np.linspace(0.1, 1., mu_n)]
+
+    denoise = bool(mu_n)
+    Y1_o, Y0_o, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus, denoise=denoise)
     Y1_t, Y0_t = Y1_o, Y0_o
     if parts:
         Y1_t = partition(Y1_t, parts)
@@ -303,5 +306,6 @@ if __name__ == "__main__":
     eta_n = 10
     mu_n = 3
 
-    control, orig = get_control(price_mat, treated_i, eta_n, mu_n, cuda=False, parts=12, denoise=False)
+    control, orig = get_control(price_mat, treated_i, eta_n, mu_n=False, cuda=False, 
+            parts=False)
     print (control/orig)
