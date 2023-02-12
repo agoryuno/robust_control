@@ -307,11 +307,10 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE,
     Y1s = unbind_data(Y1_n, a, b)
 
     assert (Y1_hats.size() == Y1s.size())
-    res = Y1_hats[min_idx, :, :]
 
     # There's really no need to use the min_idx for the
     # denoised original data, but we have it so why not use it
-    return res, Y1s[min_idx, :, :], vs[min_idx, :, :]
+    return Y1_hats[0], Y1s[0], vs[0]
 
 
 # TODO: Forward-chaining
