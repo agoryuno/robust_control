@@ -291,7 +291,7 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE,
 
     # There's really no need to use the min_idx for the
     # denoised original data, but we have it so why not use it
-    return res, Y1s[min_idx, :, :]
+    return res, Y1s[min_idx, :, :], vs
 
 
 # TODO: Forward-chaining
