@@ -276,7 +276,7 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE,
 
     cutoff = orig_mat.shape[1]
     if preint:
-        cutoff = preint
+        cutoff = orig_mat.shape[1]-preint
 
     parts = 0 if not parts else parts
     denoise = bool(mu_n)
