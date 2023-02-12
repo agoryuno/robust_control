@@ -190,6 +190,7 @@ def get_M_hat_b(Ys: torch.Tensor, mus: torch.Tensor, denoise: bool = DEFAULT_DEN
 @torch.jit.script
 def estimate_weights_b(Y1: torch.Tensor, Y0: torch.Tensor, etas: torch.Tensor):
     assert etas.size(0) == Y0.size(0)
+
     res = tsvd(Y0, full_matrices=True)
     
     U, Vh, S = res.U, res.Vh, res.S
@@ -243,6 +244,15 @@ def prepare_data(orig_mat, treated_i, etas, mus, denoise=DEFAULT_DENOISE):
     return Y1_t, Y0_t, etas, a, b
 
 
+@torch.jit.script
+def _get_train_data(Y1_o, Y0_o, cutoff: int, parts: int):
+    Y1_t, Y0_t = Y1_o[..., :cutoff], Y0_o[..., :cutoff]
+    if parts > 0:
+        Y1_t = partition(Y1_t, parts)
+        Y0_t = partition(Y0_t, parts)
+    return Y1_t, Y0_t
+
+
 def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE, 
         cuda=False, parts=DEFAULT_PART, preint=False, train: float = 1.):
     """
@@ -268,6 +278,7 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE,
     if preint:
         cutoff = preint
 
+    parts = 0 if not parts else parts
     denoise = bool(mu_n)
     Y1_o, Y0_o, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus, denoise=denoise)
 
@@ -280,20 +291,25 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE,
         b = b.to(device)
 
     train_i = int(np.floor(train*cutoff))
-    Y1_t, Y0_t = Y1_o[:, :, :train_i], Y0_o[:, :, :train_i]
-    if parts:
-        Y1_t = partition(Y1_t, parts)
-        Y0_t = partition(Y0_t, parts)
+    Y1_t, Y0_t = _get_train_data(Y1_o, Y0_o, train_i, parts)
 
     vs = estimate_weights_b(Y1_t, Y0_t, etas)
+
+    
+    
+    Y1_eta = vs.mT @ Y0_o
+    
+    min_idx = loss_fn(Y1_o[:, :, train_i:cutoff], Y1_eta[:, :, train_i:cutoff]).argmin()
+    
+    Y1_n, Y0_n = _get_train_data(Y1_o[min_idx, :, :], Y0_o[min_idx, :, :], cutoff, parts)
+
+    vs = estimate_weights_b(Y1_n.unsqueeze(0), Y0_n.unsqueeze(0), etas[min_idx].unsqueeze(0))
 
     Y1_hats = unbind_data(vs.mT @ Y0_o, a, b)
     Y1s = unbind_data(Y1_o, a, b)
 
+    print (Y1_hats.size(), Y1s.size())
     assert (Y1_hats.size() == Y1s.size())
-    
-    
-    min_idx = loss_fn(Y1s[:, :, train_i:cutoff], Y1_hats[:, :, train_i:cutoff]).argmin()  
     res = Y1_hats[min_idx, :, :]
 
     # There's really no need to use the min_idx for the
