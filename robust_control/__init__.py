@@ -8,6 +8,10 @@ import torch
 import cvxpy as cvx
 
 
+DEFAULT_PART = False
+DEFAULT_DENOISE = False
+
+
 #@torch.no_grad()
 @torch.jit.script
 def bind_data_b(X: torch.Tensor):
@@ -149,7 +153,7 @@ def calc_rmspe(fact, control, preint):
 
 #@torch.no_grad()
 @torch.jit.script
-def get_M_hat_b(Ys: torch.Tensor, mus: torch.Tensor, denoise: bool = True):
+def get_M_hat_b(Ys: torch.Tensor, mus: torch.Tensor, denoise: bool = DEFAULT_DENOISE):
     """
     Returns the estimator of Y: M_hat
     """
@@ -217,7 +221,7 @@ def loss_fn(Y1s: torch.Tensor, Y1_hats: torch.Tensor):
     return torch.sum(torch.square(torch.sub(Y1s, Y1_hats)), 2)
 
 
-def prepare_data(orig_mat, treated_i, etas, mus, denoise=True):
+def prepare_data(orig_mat, treated_i, etas, mus, denoise=DEFAULT_DENOISE):
     orig_tensor = torch.Tensor(orig_mat)
     
     batch_size = len(etas)*len(mus)
@@ -240,7 +244,7 @@ def prepare_data(orig_mat, treated_i, etas, mus, denoise=True):
 
 
 def get_control(orig_mat, treated_i, eta_n=10, mu_n=3, 
-        cuda=False, parts=None, denoise=True):
+        cuda=False, parts=DEFAULT_PART, denoise=DEFAULT_DENOISE):
     """
     Given the matrix of values 'orig_mat' and the row index 
     'treated_i', computes synthetic controls for each combination
