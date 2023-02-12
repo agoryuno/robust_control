@@ -212,14 +212,12 @@ def calc_control_b(Y1_t: torch.Tensor, Y0_t: torch.Tensor,
 #@torch.no_grad()
 torch.jit.script
 def loss_fn(Y1s: torch.Tensor, Y1_hats: torch.Tensor):
-    return torch.sum(torch.square(torch.sub(Y1s, Y1_hats)), 1)
+    return torch.sum(torch.square(torch.sub(Y1s, Y1_hats)), 2)
 
 
 def prepare_data(orig_mat, treated_i, etas, mus):
     orig_tensor = torch.Tensor(orig_mat)
     
-    
-
     batch_size = len(etas)*len(mus)
     etas_len = len(etas)
 
@@ -235,7 +233,6 @@ def prepare_data(orig_mat, treated_i, etas, mus):
     y0 = Y0.repeat(mus.size(0),1,1)
     Y0_t = get_M_hat_b(y0, mus).repeat(etas_len, 1, 1)
     Y1_t = Y1.expand(batch_size, Y1.size(0), Y1.size(1))
-    
 
     return Y1_t, Y0_t, etas, a, b
 
@@ -258,7 +255,8 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=3,
     etas = np.logspace(-2, 3, eta_n).tolist()
     mus = [compute_mu(orig_mat, treated_i, w=w) 
         for w in np.linspace(0.1, 1., mu_n)]
-    Y1_t, Y0_t, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus)
+    Y1_o, Y0_o, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus)
+    Y1_t, Y0_t = Y1_o, Y0_o
     if parts:
         Y1_t = partition(Y1_t, parts)
         Y0_t = partition(Y0_t, parts)
@@ -271,15 +269,23 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=3,
         a = a.to(device)
         b = b.to(device)
 
-    Y1_hats, _, vs = calc_control_b(Y1_t, Y0_t, etas, a, b)
+    vs = estimate_weights_b(Y1_t, Y0_t, etas)
 
-    Y1s = unbind_data(Y1_t, a, b).mT
+    Y1_hats = unbind_data(vs.mT @ Y0_o, a, b)
+    Y1s = unbind_data(Y1_o, a, b)
+
+    assert (Y1_hats.size() == Y1s.size())
+    
     min_idx = loss_fn(Y1s, Y1_hats).argmin()  
     res = Y1_hats[min_idx, :, :]
 
     # There's really no need to use the min_idx for the
     # denoised original data, but we have it so why not use it
     return res, Y1s[min_idx, :, :]
+
+
+# TODO: Forward-chaining
+# TODO: Restore partitioned data for output
 
 
 if __name__ == "__main__":
@@ -292,4 +298,5 @@ if __name__ == "__main__":
     eta_n = 10
     mu_n = 3
 
-    control, orig = get_control(price_mat, treated_i, eta_n, mu_n, cuda=False, parts=10)
+    control, orig = get_control(price_mat, treated_i, eta_n, mu_n, cuda=False, parts=12)
+    print (control/orig)
