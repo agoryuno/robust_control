@@ -170,7 +170,7 @@ def get_M_hat_b(Ys: torch.Tensor, mus: torch.Tensor, denoise: bool = DEFAULT_DEN
     # Remove singular values that are below $\mu$
     # by setting them to zero
     
-    # Disable if denoise is False
+    # Disable if mus is False
     if denoise:
         s[s <= mus] = 0.
 
@@ -244,7 +244,7 @@ def prepare_data(orig_mat, treated_i, etas, mus, denoise=DEFAULT_DENOISE):
 
 
 def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE, 
-        cuda=False, parts=DEFAULT_PART):
+        cuda=False, parts=DEFAULT_PART, preint=False, train: float = 1.):
     """
     Given the matrix of values 'orig_mat' and the row index 
     'treated_i', computes synthetic controls for each combination
@@ -264,20 +264,26 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE,
         mus = [compute_mu(orig_mat, treated_i, w=w) 
             for w in np.linspace(0.1, 1., mu_n)]
 
+    cutoff = orig_mat.shape[1]
+    if preint:
+        cutoff = preint
+
     denoise = bool(mu_n)
     Y1_o, Y0_o, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus, denoise=denoise)
-    Y1_t, Y0_t = Y1_o, Y0_o
-    if parts:
-        Y1_t = partition(Y1_t, parts)
-        Y0_t = partition(Y0_t, parts)
 
     if cuda:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        Y1_t = Y1_t.to(device)
-        Y0_t = Y0_t.to(device)
+        Y1_o = Y1_o.to(device)
+        Y0_o = Y0_o.to(device)
         etas = etas.to(device)
         a = a.to(device)
         b = b.to(device)
+
+    train_i = int(np.floor(train*cutoff))
+    Y1_t, Y0_t = Y1_o[:, :, :train_i], Y0_o[:, :, :train_i]
+    if parts:
+        Y1_t = partition(Y1_t, parts)
+        Y0_t = partition(Y0_t, parts)
 
     vs = estimate_weights_b(Y1_t, Y0_t, etas)
 
@@ -286,7 +292,8 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE,
 
     assert (Y1_hats.size() == Y1s.size())
     
-    min_idx = loss_fn(Y1s, Y1_hats).argmin()  
+    
+    min_idx = loss_fn(Y1s[:, :, train_i:cutoff], Y1_hats[:, :, train_i:cutoff]).argmin()  
     res = Y1_hats[min_idx, :, :]
 
     # There's really no need to use the min_idx for the
@@ -306,6 +313,6 @@ if __name__ == "__main__":
     eta_n = 10
     mu_n = 3
 
-    control, orig = get_control(price_mat, treated_i, eta_n, mu_n=False, cuda=False, 
-            parts=False)
+    control, orig, v = get_control(price_mat, treated_i, eta_n, mu_n=False, cuda=False, 
+            parts=False, preint=90, train=0.79)
     print (control/orig)
