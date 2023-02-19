@@ -177,8 +177,9 @@ def get_M_hat_b(Ys: torch.Tensor, mus: torch.Tensor, denoise: bool = DEFAULT_DEN
     # Make the singular values matrix
     smat = torch.zeros_like(Ys)
     b = torch.eye(s.size(1))
-    c = s.unsqueeze(2).expand(s.size(0), s.size(1), s.size(1))
-    smat[:, :c.size(2), :] = c * b
+    c = s.unsqueeze(s.dim()).expand(s.shape[-2], s.shape[-1], s.shape[-1])
+    print (c.size(), b.size(), smat.size())  
+    smat[:, :c.shape[-1], :] = c * b
 
     # build the estimator of Y
     M_hat = u @ (smat @ v)
@@ -308,6 +309,7 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE,
                                                      parts)
     
     Y1_o, Y0_o, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus, denoise=denoise)
+
 
     if cuda:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
