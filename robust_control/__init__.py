@@ -1,5 +1,6 @@
 from itertools import product
 import numpy as np
+from typing import Union, List, Tuple
 
 from numpy.linalg import svd
 from torch.linalg import svd as tsvd
@@ -170,15 +171,16 @@ def get_M_hat_b(Ys: torch.Tensor, mus: torch.Tensor, denoise: bool = DEFAULT_DEN
     # Remove singular values that are below $\mu$
     # by setting them to zero
     
-    # Disable if mus is False
+    # Disable if denoise is False
     if denoise:
         s[s <= mus] = 0.
 
     # Make the singular values matrix
     smat = torch.zeros_like(Ys)
-    b = torch.eye(s.size(1))
-    c = s.unsqueeze(2).expand(s.size(0), s.size(1), s.size(1))
-    smat[:, :c.size(2), :] = c * b
+    b = torch.eye(s.shape[-1])
+    c = s.unsqueeze(s.dim()).expand(s.shape[-2], s.shape[-1], s.shape[-1])
+
+    smat[:, :c.shape[-2], :c.shape[-1]] = c * b
 
     # build the estimator of Y
     M_hat = u @ (smat @ v)
@@ -225,11 +227,11 @@ def loss_fn(Y1s: torch.Tensor, Y1_hats: torch.Tensor):
 def prepare_data(orig_mat, treated_i, etas, mus, denoise=DEFAULT_DENOISE):
     orig_tensor = torch.Tensor(orig_mat)
     
-    batch_size = len(etas)*len(mus)
+    batch_size = len(etas)*mus.size(0)
     etas_len = len(etas)
 
-    mus = torch.Tensor(np.array(mus))
-    mus = mus.reshape( (mus.size(0), 1))
+    #mus = torch.Tensor(np.array(mus))
+    #mus = mus.reshape( (mus.size(0), 1))
 
     etas = torch.Tensor(np.array(etas))
     etas = etas.reshape( (etas.size(0), 1)).repeat(mus.size(0), 1)
@@ -253,11 +255,35 @@ def _get_train_data(Y1_o, Y0_o, cutoff: int, parts: int):
     return Y1_t, Y0_t
 
 
-def _make_params(mat, treated_i, eta_n, mu_n, preint, parts):
+def _make_params(
+        mat: np.ndarray,  
+        eta_n: int, 
+        mu_n: int, 
+        preint: int, 
+        treated_i: Union[None, int] = None, 
+        parts: Union[None, int] = None) -> Tuple[List, torch.Tensor, int, int, bool]:
     """
+    Prepares hyperparameters for the `get_control()` and `get_all_controls()`
+    functions.
+
+    Parameters:
+    -----------
+    mat: np.ndarray
+        The data matrix
+    treated_i: int
+        The index of the treated object (row)
+    eta_n: int
+        The number of values of eta to use
+    mu_n: int
+        The number of values of mu to use
+    preint: int
+        The number of observations (columns) to use for training
+    parts: int
+        The number of partitions to use for training 
+        (default is None)
     
     Returns:
-    ---------
+    -----------
     etas: torch.Tensor
         A tensor of shape (eta_n, 1) containing the values of eta
     mus: torch.Tensor
@@ -275,6 +301,8 @@ def _make_params(mat, treated_i, eta_n, mu_n, preint, parts):
     if mu_n:
         mus = [compute_mu(mat, treated_i, w=w) 
             for w in np.linspace(0.1, 1., mu_n)]
+
+    mus = torch.from_numpy(np.array(mus)).unsqueeze(1)
 
     cutoff = mat.shape[1]
     if preint:
@@ -301,11 +329,11 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE,
     """
 
     etas, mus, cutoff, parts, denoise = _make_params(orig_mat, 
-                                                     treated_i, 
                                                      eta_n, 
                                                      mu_n, 
                                                      preint, 
-                                                     parts)
+                                                     parts=parts,
+                                                     treated_i=treated_i)
     
     Y1_o, Y0_o, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus, denoise=denoise)
 
@@ -359,6 +387,12 @@ def get_all_controls(orig_mat, eta_n=10, mu_n=DEFAULT_DENOISE,
     # Compared to `get_control()`, this function adds a new batch dimension
     # that holds batches of rows from the original matrix. Each batch is
     # is a 3D tensor like the one used by `get_control()`.
+    etas, mus, cutoff, parts, denoise = _make_params(orig_mat, 
+                                                     treated_i, 
+                                                     eta_n, 
+                                                     mu_n, 
+                                                     preint, 
+                                                     parts)
     
 
 
