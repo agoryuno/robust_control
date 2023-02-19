@@ -179,7 +179,6 @@ def get_M_hat_b(Ys: torch.Tensor, mus: torch.Tensor, denoise: bool = DEFAULT_DEN
     smat = torch.zeros_like(Ys)
     b = torch.eye(s.size(1))
     c = s.unsqueeze(s.dim()).expand(s.shape[-2], s.shape[-1], s.shape[-1])
-    print (c.size(), b.size(), smat.size())  
     smat[:, :c.shape[-1], :] = c * b
 
     # build the estimator of Y
