@@ -253,6 +253,38 @@ def _get_train_data(Y1_o, Y0_o, cutoff: int, parts: int):
     return Y1_t, Y0_t
 
 
+def _make_params(mat, treated_i, eta_n, mu_n, preint, parts):
+    """
+    
+    Returns:
+    ---------
+    etas: torch.Tensor
+        A tensor of shape (eta_n, 1) containing the values of eta
+    mus: torch.Tensor
+        A tensor of shape (mu_n, 1) containing the values of mu
+    cutoff: int
+        The number of observations to use for training
+    parts: int
+        The number of partitions to use for training (0 if no partitions)
+    denoise: bool
+        Whether to denoise the data
+    """
+
+    etas = np.logspace(-2, 3, eta_n).tolist()
+    mus = [0.5]
+    if mu_n:
+        mus = [compute_mu(mat, treated_i, w=w) 
+            for w in np.linspace(0.1, 1., mu_n)]
+
+    cutoff = mat.shape[1]
+    if preint:
+        cutoff = mat.shape[1]-preint
+
+    parts = 0 if not parts else parts
+    denoise = bool(mu_n)
+    return etas, mus, cutoff, parts, denoise
+
+
 def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE, 
         cuda=False, parts=DEFAULT_PART, preint=False, train: float = 1.):
     """
@@ -268,18 +300,13 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE,
     `treated_i`.
     """
 
-    etas = np.logspace(-2, 3, eta_n).tolist()
-    mus = [0.5]
-    if mu_n:
-        mus = [compute_mu(orig_mat, treated_i, w=w) 
-            for w in np.linspace(0.1, 1., mu_n)]
-
-    cutoff = orig_mat.shape[1]
-    if preint:
-        cutoff = orig_mat.shape[1]-preint
-
-    parts = 0 if not parts else parts
-    denoise = bool(mu_n)
+    etas, mus, cutoff, parts, denoise = _make_params(orig_mat, 
+                                                     treated_i, 
+                                                     eta_n, 
+                                                     mu_n, 
+                                                     preint, 
+                                                     parts)
+    
     Y1_o, Y0_o, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus, denoise=denoise)
 
     if cuda:
@@ -311,6 +338,29 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE,
     # There's really no need to use the min_idx for the
     # denoised original data, but we have it so why not use it
     return Y1_hats[0], Y1s[0], vs[0]
+
+
+# A function to get controls for every row in the matrix
+def get_all_controls(orig_mat, eta_n=10, mu_n=DEFAULT_DENOISE, 
+        cuda=False, parts=DEFAULT_PART, preint=False, train: float = 1.):
+    """
+    Given the matrix of values 'orig_mat', computes synthetic 
+    controls for each row in the matrix, for each combination
+    of `eta` and `mu` for the respective numbers of `eta_n` and 
+    `mu_n`.
+    
+    Returns a tensor of dimensions `orig_mat.size()[0] by orig_mat.size()[1]` 
+    that contains the synthetic controls calculated with the best 
+    found values of parameters $eta$ and $mu$, and a tensor with the
+    same dimensions, containing the denoised original data for observation
+    `treated_i`.
+    """
+
+    # Compared to `get_control()`, this function adds a new batch dimension
+    # that holds batches of rows from the original matrix. Each batch is
+    # is a 3D tensor like the one used by `get_control()`.
+    
+
 
 
 # TODO: Forward-chaining
