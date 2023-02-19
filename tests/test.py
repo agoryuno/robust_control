@@ -9,8 +9,6 @@ class Test(unittest.TestCase):
         import os
         import pickle
 
-        print (os.getcwd())
-
         with open("tests/price_mat.pkl", "rb") as f:
             self.mat, _, _ = pickle.load(f)
 
@@ -21,7 +19,13 @@ class Test(unittest.TestCase):
         mu_n = 3
 
         control, orig, v = get_control(self.mat, treated_i, eta_n, mu_n=mu_n, cuda=False, 
-            parts=False, preint=90, train=0.79)
+            parts=10, preint=90, train=0.79)
+        
+        self.assertEqual(control.shape, orig.shape)
+        self.assertEqual(control.shape[0], 1)
+        self.assertEqual(control.shape[1], 121)
+        self.assertEqual(v.shape[0], 299)
+        self.assertEqual(v.shape[1], 1)
         
 
 

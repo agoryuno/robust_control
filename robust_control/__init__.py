@@ -1,6 +1,6 @@
 from itertools import product
 import numpy as np
-from typing import Union, List, Tuple
+from typing import Literal, Union, List, Tuple
 
 from numpy.linalg import svd
 from torch.linalg import svd as tsvd
@@ -190,7 +190,7 @@ def get_M_hat_b(Ys: torch.Tensor, mus: torch.Tensor, denoise: bool = DEFAULT_DEN
 #@torch.no_grad()
 @torch.jit.script
 def estimate_weights_b(Y1: torch.Tensor, Y0: torch.Tensor, etas: torch.Tensor):
-    assert etas.size(0) == Y0.size(0)
+    assert etas.size(0) == Y0.size(0), (etas.size(0), Y0.size(0))
 
     res = tsvd(Y0, full_matrices=True)
     
@@ -258,7 +258,7 @@ def _make_params(
         mat: np.ndarray,  
         eta_n: int, 
         mu_n: int, 
-        preint: int, 
+        preint: Union[Literal[False], int], 
         treated_i: Union[None, int] = None, 
         parts: Union[None, int] = None) -> Tuple[List, torch.Tensor, int, int, bool]:
     """
@@ -305,7 +305,7 @@ def _make_params(
 
     cutoff = mat.shape[1]
     if preint:
-        cutoff = mat.shape[1]-preint
+        cutoff = preint
 
     parts = 0 if not parts else parts
     denoise = bool(mu_n)
@@ -313,7 +313,7 @@ def _make_params(
 
 
 def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE, 
-        cuda=False, parts=DEFAULT_PART, preint=False, train: float = 1.):
+        cuda=False, parts=DEFAULT_PART, preint=False, train: float = .8):
     """
     Given the matrix of values 'orig_mat' and the row index 
     'treated_i', computes synthetic controls for each combination
@@ -330,7 +330,7 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE,
     etas, mus, cutoff, parts, denoise = _make_params(orig_mat, 
                                                      eta_n, 
                                                      mu_n, 
-                                                     preint, 
+                                                     preint=preint, 
                                                      parts=parts,
                                                      treated_i=treated_i)
     
@@ -354,8 +354,10 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE,
     
     min_idx = loss_fn(Y1_o[:, :, train_i:cutoff], Y1_eta[:, :, train_i:cutoff]).argmin()
     
-    Y1_n, Y0_n = _get_train_data(Y1_o[min_idx, :, :], Y0_o[min_idx, :, :], cutoff, parts)
-    Y1_n, Y0_n = Y1_n.unsqueeze(0), Y0_n.unsqueeze(0)
+    Y1_n, Y0_n = _get_train_data(Y1_o[min_idx, :, :].unsqueeze(0), 
+                                 Y0_o[min_idx, :, :].unsqueeze(0), 
+                                 cutoff, parts)
+    #Y1_n, Y0_n = Y1_n.unsqueeze(0), Y0_n.unsqueeze(0)
     vs = estimate_weights_b(Y1_n, Y0_n, etas[min_idx].unsqueeze(0))
 
     Y1_hats = unbind_data(vs.mT @ Y0_o, a, b)
