@@ -37,5 +37,5 @@ The function returns a tuple with two $N \times 1$ vectors: the estimated synthe
 ### Note on CUDA support:
 
 Unfortunately, PyTorch's implementation of SVD isn't fully parallelizable on CUDA, so running the
-estimation of the GPU may actually be slower than on the CPU (see this issue for details: https://github.com/pytorch/pytorch/issues/41306). For that reason CUDA support is disabled by default
+estimation on the GPU may actually be slower than on the CPU (see this issue for details: https://github.com/pytorch/pytorch/issues/41306). For that reason CUDA support is disabled by default
 but remains an option for the future.
