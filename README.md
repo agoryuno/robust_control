@@ -3,12 +3,14 @@
 A PyTorch implementation of the "robust" synthetic control model proposed by Amjad, Shah and Shen \[[arxiv](https://arxiv.org/abs/1711.06940)\].
 
 The robust synthetic control is an extension of the original synthetic control model, proposed by Abadie, Diamond and Hainmueller (for overview see:
-https://www.aeaweb.org/articles?id=10.1257/jel.20191450).
+https://www.aeaweb.org/articles?id=10.1257/jel.20191450). The synthetic control method is a causal inference method that uses a panel of data to estimate the effect of an intervention on one memeber
+of that panel. The synthetic control for a "treated" object is constructed as a weighted average of
+all other objects in the panel, with weights estimated controling for relevant covariates. The robust model is an extension of the original model that doesn't use covariates and instead fits
+the weights based on the data itself. It tries to find the weights that minimize the difference between the outcomes for the treated object and the synthetic control in the pretreatment period.
 
 The main advantages of the robust model are its ability to handle missing data and its speed. The original model involves a
 non-convex optimization which can make parameter estimation take too long, especially when many synthetic controls need to be generated. The robust model,
-on the other hand, utilizes a ridge regression with a scalar regularization parameter, which makes it possible to use singular value decomposition for
-estimation.
+on the other hand, utilizes a ridge regression with a scalar regularization parameter, which makes it possible to use singular value decomposition for estimation.
 
 The package currently implements most of the optimizations suggested by Amjad et al for their Algorithm 1 (the non-Bayesian variant), with the notable exception of forward-chaining for
 hyperparameter selection - the standard train-test split is used instead.
@@ -24,10 +26,8 @@ No distributions are provided yet, so installing directly from the repo is the o
 
 # Usage
 
-The package provides two main functions: `get_control` and `get_controls`. The former is intended to be used for estimating a single row of a matrix, while `get_controls()` is for multiple rows.
-They are kept separate because PyTorch's heuristics result in subtle differences in the results,
- depending on batch size. In general, if you only want to get a control estimate for a single object, use `get_control()`, otherwise use `get_controls()` as it offers significant performance
- improvement.
+The main function is `get_control()`. This takes a panel matrix, with objects in the rows and timestep observations in columns, and a row index of the object you want to estimate a control for
+and returns the timeseries for the synthetic control, original data passed through a denoising filter and the weights of the synthetic control. See below for full details.
 
 ## Function `get_control()`
 
@@ -55,8 +55,8 @@ Parameters:
     The number of values of $eta$ to use
 
 `mu_n`: Union[int, Literal[False]] (optional)
-    The number of values of $mu$ to use (anything over 5 is useless, default is False
-    which disables denoising.
+    The number of values of $mu$ to use (anything over 5 is useless, default is 3.
+    Setting this to False disables denoising entirely.
 
 `cuda`: bool (optional)
     Whether to use CUDA - CUDA support for SVD in PyTorch is limited so this is
@@ -93,6 +93,3 @@ Returns:
 Unfortunately, PyTorch's implementation of SVD isn't fully parallelizable on CUDA, so running the
 estimation on the GPU may actually be slower than on the CPU (see this issue for details: https://github.com/pytorch/pytorch/issues/41306). For that reason CUDA support is disabled by default
 but remains an option for the future.
-
-As an alternative, there is in example of using `multiprocessing` for parallel estimation of
-all rows in a matrix in `mpc_test.py`.

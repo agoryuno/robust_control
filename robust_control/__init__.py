@@ -10,7 +10,7 @@ import cvxpy as cvx
 
 
 DEFAULT_PART = False
-DEFAULT_DENOISE = False
+DEFAULT_DENOISE = 3
 
 
 #@torch.no_grad()

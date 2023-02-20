@@ -316,6 +316,13 @@ class Test(unittest.TestCase):
         
         #print (v.flatten()/vs_b[0].flatten())
         
+    # make a method to test bind_data_b
+    def test_bind_data_b(self):
+        # import the function to test
+        from robust_control import bind_data_b
+
+        
+
 
 if __name__ == '__main__':
     unittest.main()
