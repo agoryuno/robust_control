@@ -430,7 +430,7 @@ def _make_params_b(mat: np.ndarray,
     # convert to a torch.Tensor and 
     # reshape it to (len(rows), eta_n)
     etas = np.logspace(-2, 3, eta_n)
-    etas = torch.from_numpy(etas).unsqueeze(0).expand(len(rows), eta_n)
+    etas = torch.from_numpy(etas).unsqueeze(0).expand(len(rows), eta_n).type(torch.float32)
 
     mus = np.array([0.5]*len(rows)).reshape((len(rows), 1))
     if mu_n:
