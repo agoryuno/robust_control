@@ -190,7 +190,8 @@ class Test(unittest.TestCase):
         # The SVD approximation algorithm is not deterministic,
         # so we use a loose tolerance here.
         self.assertTrue(torch.allclose(vsb[0][0], vs[0], atol=1e-3))
-        
+
+
 
 if __name__ == '__main__':
     unittest.main()

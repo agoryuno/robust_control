@@ -34,8 +34,11 @@ The main entry point is the function `get_control(matrix, i, eta_n=10, mu_n=3, c
 
 The function returns a tuple with two $N \times 1$ vectors: the estimated synthetic control and the original denoised outcome values.
 
-### Note on CUDA support:
+### Note on CUDA and performance:
 
 Unfortunately, PyTorch's implementation of SVD isn't fully parallelizable on CUDA, so running the
 estimation on the GPU may actually be slower than on the CPU (see this issue for details: https://github.com/pytorch/pytorch/issues/41306). For that reason CUDA support is disabled by default
 but remains an option for the future.
+
+As an alternative, there is in example of using `multiprocessing` for parallel estimation of
+all rows in a matrix in `tests/mpc_test.py`.
