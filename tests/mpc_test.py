@@ -23,6 +23,7 @@ def fn(*args):
     return get_controls(price_mat, rows, eta_n, mu_n=mu_n, cuda=False, 
                 parts=False, preint=90, train=0.79, double=True)
 
+
 def run(args, procs=4):
     with Pool(procs) as p:
         p.starmap(fn, args)
