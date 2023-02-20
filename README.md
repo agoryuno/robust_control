@@ -43,7 +43,8 @@ same dimensions, containing the denoised original data for observation
 `treated_i`.
 
 Parameters:
------------
+===========
+
 `orig_mat`: np.ndarray
     The data matrix
 
