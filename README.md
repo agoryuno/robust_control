@@ -56,7 +56,7 @@ Parameters:
 
 `mu_n`: Union[int, Literal[False]] (optional)
     The number of values of $mu$ to use (anything over 5 is useless, default is False
-    which means a single value))
+    which disables denoising.
 
 `cuda`: bool (optional)
     Whether to use CUDA - CUDA support for SVD in PyTorch is limited so this is

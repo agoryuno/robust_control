@@ -204,13 +204,17 @@ def get_M_hat_bb(
     
     # Disable if denoise is False
     if denoise:
+        print("Denoising is enabled")
         s[s <= mus.unsqueeze(-1)] = 0.
+
 
     # Make the singular values matrix
     smat = torch.zeros_like(Ys)
     b = torch.eye(s.shape[-1], device=s.device)
     c = s.unsqueeze(s.dim()).expand(s.shape[0], s.shape[1], s.shape[2], s.shape[2])
     smat[:, :, :c.shape[-1], :] = c * b
+
+    print (smat.shape)
 
     # build the estimator of Y
     M_hat = u @ (smat @ v)
@@ -329,7 +333,7 @@ def prepare_data_b(
         mus = mus.double()
 
     etas = etas.repeat(1, mus.shape[-1]).unsqueeze(0)
-
+    
     bound_mat, a, b = bind_data_b(orig_mat)
 
     rows_idx = torch.tensor(rows, device=orig_mat.device)
@@ -342,6 +346,7 @@ def prepare_data_b(
     y0 = Y0.repeat(1, mus.size(1), 1, 1) 
 
     M_hat = get_M_hat_bb(y0, mus, denoise=denoise)
+    
     Y0_t = M_hat.repeat(1, etas.shape[-1]//mus.shape[-1], 1, 1)
 
     Y1_t = Y1.expand(Y1.shape[0], etas.shape[-1], Y1.size(2), Y1.size(3))
@@ -588,7 +593,7 @@ def get_control(orig_mat: torch.Tensor,
 # A function to get controls for a set of rows
 def get_controls(orig_mat, rows: Optional[List] = None, eta_n=10, mu_n=DEFAULT_DENOISE, 
         cuda=False, parts=DEFAULT_PART, preint=False, train: float = 1.,
-        double: bool = False, batch_size=10):
+        double: bool = False):
     """
     Given the matrix of values 'orig_mat', computes synthetic 
     controls for all rows in `rows`. If `rows` is None, computes
