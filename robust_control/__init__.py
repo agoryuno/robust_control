@@ -524,8 +524,8 @@ def get_control(orig_mat: torch.Tensor,
         (default is False)
     
     `preint`: bool (optional)
-        Number of pre-intervention periods to estimate the control on, if False -
-        uses all periods (default is False)
+        Number of pre-intervention periods to estimate the control on, if False - uses 
+        all periods (default is False)
     
     `train`: float (optional)
         The proportion of the data to use for training (default is 0.8)
