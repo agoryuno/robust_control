@@ -29,7 +29,8 @@ They are kept separate because PyTorch's heuristics result in subtle differences
  depending on batch size. In general, if you only want to get a control estimate for a single object, use `get_control()`, otherwise use `get_controls()` as it offers significant performance
  improvement.
 
-## Function `get_control()` 
+## Function `get_control()`
+ 
 Given the matrix of values 'orig_mat' and the row index 
 'treated_i', computes synthetic controls for each combination
 of `eta` and `mu` for the respective numbers of `eta_n` and 
