@@ -44,6 +44,7 @@ same dimensions, containing the denoised original data for observation
 
 Parameters:
 -----------
+
 `orig_mat`: np.ndarray
     The data matrix
 
