@@ -93,4 +93,4 @@ estimation on the GPU may actually be slower than on the CPU (see this issue for
 but remains an option for the future.
 
 As an alternative, there is in example of using `multiprocessing` for parallel estimation of
-all rows in a matrix in `tests/mpc_test.py`.
+all rows in a matrix in `mpc_test.py`.
