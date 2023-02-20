@@ -208,8 +208,7 @@ def get_M_hat_bb(
 
     # Make the singular values matrix
     smat = torch.zeros_like(Ys)
-
-    b = torch.eye(s.shape[-1])
+    b = torch.eye(s.shape[-1], device=s.device)
     c = s.unsqueeze(s.dim()).expand(s.shape[0], s.shape[1], s.shape[2], s.shape[2])
     smat[:, :, :c.shape[-1], :] = c * b
 
@@ -275,6 +274,28 @@ def estimate_weights_b(Y1: torch.Tensor, Y0: torch.Tensor, etas: torch.Tensor):
     return U @ D @ Vh @ Y1.mT
     
 
+@torch.jit.script
+def estimate_weights_bb(Y1: torch.Tensor, 
+                        Y0: torch.Tensor, 
+                        etas: torch.Tensor
+                        ):
+    assert etas.size(0) == Y0.size(0), (etas.size(0), Y0.size(0))
+
+    res = tsvd(Y0, full_matrices=True)
+
+    U, Vh, S = (res.U, 
+                res.Vh, 
+                res.S)
+    
+    D = torch.zeros_like(Y0)
+    
+    b = torch.eye(S.shape[-1], device=S.device)#.unsqueeze(0)
+    a = torch.div(S, torch.sub(torch.square(S), torch.square(etas)))
+    c = a.unsqueeze(S.dim()).expand(a.size(0), a.size(1), a.size(2), a.size(2))
+    D[:, :, :c.shape[-1], :] = c * b
+    result = U @ D @ Vh @ Y1.mT
+    return result
+
 #@torch.no_grad()
 #@torch.jit.script
 #def calc_control_b(Y1_t: torch.Tensor, Y0_t: torch.Tensor, 
@@ -290,7 +311,7 @@ def estimate_weights_b(Y1: torch.Tensor, Y0: torch.Tensor, etas: torch.Tensor):
 #@torch.no_grad()
 torch.jit.script
 def loss_fn(Y1s: torch.Tensor, Y1_hats: torch.Tensor):
-    return torch.sum(torch.square(torch.sub(Y1s, Y1_hats)), 2)
+    return torch.sum(torch.square(torch.sub(Y1s, Y1_hats)), -1)
 
 
 def prepare_data_b( 
@@ -298,11 +319,15 @@ def prepare_data_b(
                     rows: List,
                     etas: torch.Tensor,
                     mus: torch.Tensor,
-                    denoise: bool=DEFAULT_DENOISE
+                    denoise: bool=DEFAULT_DENOISE,
+                    double: bool = False
                     ):
     
-    combos_len = etas.shape[1]*mus.shape[1]
-    
+    if double:
+        orig_mat = orig_mat.double()
+        etas = etas.double()
+        mus = mus.double()
+
     etas = etas.repeat(1, mus.shape[-1]).unsqueeze(0)
 
     bound_mat, a, b = bind_data_b(orig_mat)
@@ -359,6 +384,7 @@ def _get_train_data(Y1_o, Y0_o, cutoff: int, parts: int):
         Y1_t = partition(Y1_t, parts)
         Y0_t = partition(Y0_t, parts)
     return Y1_t, Y0_t
+
 
 
 def _make_params(
@@ -500,7 +526,6 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE,
     Y1_n, Y0_n = _get_train_data(Y1_o[min_idx, :, :].unsqueeze(0), 
                                  Y0_o[min_idx, :, :].unsqueeze(0), 
                                  cutoff, parts)
-    #Y1_n, Y0_n = Y1_n.unsqueeze(0), Y0_n.unsqueeze(0)
     vs = estimate_weights_b(Y1_n, Y0_n, etas[min_idx].unsqueeze(0))
 
     Y1_hats = unbind_data(vs.mT @ Y0_o, a, b)
@@ -508,14 +533,13 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE,
 
     assert (Y1_hats.size() == Y1s.size())
 
-    # There's really no need to use the min_idx for the
-    # denoised original data, but we have it so why not use it
     return Y1_hats[0], Y1s[0], vs[0]
 
 
 # A function to get controls for a set of rows
 def get_controls(orig_mat, rows: Optional[List] = None, eta_n=10, mu_n=DEFAULT_DENOISE, 
-        cuda=False, parts=DEFAULT_PART, preint=False, train: float = 1.):
+        cuda=False, parts=DEFAULT_PART, preint=False, train: float = 1.,
+        double: bool = False, batch_size=10):
     """
     Given the matrix of values 'orig_mat', computes synthetic 
     controls for all rows in `rows`. If `rows` is None, computes
@@ -537,13 +561,49 @@ def get_controls(orig_mat, rows: Optional[List] = None, eta_n=10, mu_n=DEFAULT_D
                                                      rows=rows,
                                                      parts=parts,
                                                      )
-    Y1_o, Y0_o, etas, a, b = prepare_data_b(torch.Tensor(orig_mat), rows, etas, mus, denoise=denoise)
+    Y1_o, Y0_o, etas, a, b = prepare_data_b(torch.Tensor(orig_mat), 
+                                            rows, 
+                                            etas, 
+                                            mus, 
+                                            denoise=denoise,
+                                            double=double)
     
+    if cuda:
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        Y1_o = Y1_o.to(device)
+        Y0_o = Y0_o.to(device)
+        etas = etas.to(device)
+        a = a.to(device)
+        b = b.to(device)
+
+    train_i = int(np.floor(train*cutoff))
+    Y1_t, Y0_t = _get_train_data(Y1_o, Y0_o, train_i, parts)
+
+    vs = estimate_weights_bb(Y1_t, Y0_t, etas)
+
+    Y1_eta = vs.mT @ Y0_o
+
+    loss = loss_fn(Y1_o[:, :, :, train_i:cutoff], Y1_eta[:, :, :, train_i:cutoff])
+    min_idx = loss.argmin(dim=1)
+
+    Y1_n, Y0_n = _get_train_data(Y1_o[:, min_idx[:,0]], 
+                                 Y0_o[:, min_idx[:,0]], 
+                                 cutoff, parts)
     
+    vs = estimate_weights_bb(Y1_n, Y0_n, etas[:, min_idx[:,0]])
 
+    Y1_hats = unbind_data(vs.mT @ Y0_o[:, min_idx[:,0]], a, b)
+    Y1s = unbind_data(Y1_o[:, min_idx[:,0]], a, b)
 
+    assert (Y1_hats.size() == Y1s.size())
+
+    return Y1_hats[0], Y1s[0], vs[0]
 
 # TODO: Forward-chaining
+
+def split(a, n):
+    k, m = divmod(len(a), n)
+    return (a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n))
 
 if __name__ == "__main__":
     import pickle
@@ -554,9 +614,15 @@ if __name__ == "__main__":
     treated_i = 0
     eta_n = 10
     mu_n = 3
+    #rows = [0,1]
+    row_batches = split([i for i in range(price_mat.shape[0])], price_mat.shape[0]//25)
+    #control, orig, v = get_control(price_mat, treated_i, eta_n, mu_n=mu_n, cuda=False,)
+    #a = control/orig
+    from tqdm import tqdm 
+    for rows in tqdm(row_batches):
+        control, orig, v = get_controls(price_mat, rows, eta_n, mu_n=3, cuda=False, 
+                parts=False, preint=90, train=0.79, double=True)
+    #b = control[0]/orig[0]
 
-    #get_control(price_mat, treated_i, eta_n, mu_n=mu_n, cuda=False,)
-    
-    control, orig, v = get_controls(price_mat, [0,1], eta_n, mu_n=3, cuda=False, 
-            parts=False, preint=90, train=0.79)
-    #print (control/orig)
+    #print (a)
+    #print (b)
