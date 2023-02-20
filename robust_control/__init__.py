@@ -287,9 +287,9 @@ def estimate_weights_bb(Y1: torch.Tensor,
                 res.Vh, 
                 res.S)
     
-    D = torch.zeros_like(Y0)
+    D = torch.zeros_like(Y0, device=S.device)
     
-    b = torch.eye(S.shape[-1], device=S.device)#.unsqueeze(0)
+    b = torch.eye(S.shape[-1], device=S.device)
     a = torch.div(S, torch.sub(torch.square(S), torch.square(etas)))
     c = a.unsqueeze(S.dim()).expand(a.size(0), a.size(1), a.size(2), a.size(2))
     D[:, :, :c.shape[-1], :] = c * b
@@ -384,7 +384,6 @@ def _get_train_data(Y1_o, Y0_o, cutoff: int, parts: int):
         Y1_t = partition(Y1_t, parts)
         Y0_t = partition(Y0_t, parts)
     return Y1_t, Y0_t
-
 
 
 def _make_params(
@@ -620,7 +619,7 @@ if __name__ == "__main__":
     #a = control/orig
     from tqdm import tqdm 
     for rows in tqdm(row_batches):
-        control, orig, v = get_controls(price_mat, rows, eta_n, mu_n=3, cuda=False, 
+        control, orig, v = get_controls(price_mat, rows, eta_n, mu_n=mu_n, cuda=False, 
                 parts=False, preint=90, train=0.79, double=True)
     #b = control[0]/orig[0]
 

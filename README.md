@@ -10,15 +10,15 @@ non-convex optimization which can make parameter estimation take too long, espec
 on the other hand, utilizes a ridge regression with a scalar regularization parameter, which makes it possible to use singular value decomposition for
 estimation.
 
-This package utilizes this fact and implements the model with an SVD in PyTorch, making CUDA acceleration available with a "flip of a switch". It also
-implements most of the optimizations suggested by Amjad et al for their Algorithm 1 (the non-Bayesian variant).
+The package currently implements most of the optimizations suggested by Amjad et al for their Algorithm 1 (the non-Bayesian variant), with the notable exception of forward-chaining for
+hyperparameter selection - the standard train-test split is used instead.
 
 The package is in a very early pre-alpha for now. That is to mean that it works correctly until a commit stops it from doing so until it works
 again :)
 
 # Installation
 
-No packages are provided yet, so installing directly from the repo is the only option:
+No distributions are provided yet, so installing directly from the repo is the only option:
 
 `pip install git+https://github.com/agoryuno/robust_control`
 
@@ -34,4 +34,8 @@ The main entry point is the function `get_control(matrix, i, eta_n=10, mu_n=3, c
 
 The function returns a tuple with two $N \times 1$ vectors: the estimated synthetic control and the original denoised outcome values.
 
-On Google Colab with a Standard GPU the problem size above takes 150 ms on average to compute.
+### Note on CUDA support:
+
+Unfortunately, PyTorch's implementation of SVD isn't fully parallelizable on CUDA, so running the
+estimation of the GPU will actually be slower than on the CPU. CUDA support is disabled by default
+but remains an option for the future.

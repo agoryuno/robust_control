@@ -8,7 +8,7 @@ except:
 
 setup(
     name='robust_control',
-    version='0.1.0',
+    version='0.2.0',
     author='Alexander Goryunov',
     author_email='alex.goryunov@gmail.com',
     description='A PyTorch imlpementation of the "robust" synthetic control algorithm',
