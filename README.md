@@ -51,10 +51,10 @@ treated_i: int
     - The index of the treated object (row)
 
 eta_n: int
-    - (Optional) The number of values of $eta$ to use
+    - (Optional) The number of values of $\eta$ to use
 
 mu_n: Union[int, Literal[False]]
-    - (Optional) The number of values of $mu$ to use (anything over 5 is useless, default is False
+    - (Optional) The number of values of $\mu$ to use (anything over 5 is useless, default is False
     which means a single value))
 
 cuda: bool
