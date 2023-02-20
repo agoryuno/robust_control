@@ -1,6 +1,6 @@
 from itertools import product
 import numpy as np
-from typing import Literal, Union, List, Tuple
+from typing import Literal, Optional, Union, List, Tuple
 
 from numpy.linalg import svd
 from torch.linalg import svd as tsvd
@@ -51,13 +51,25 @@ def compute_hat_p(Y):
     p = have_vals/Y.size
     return np.maximum(p, 1/((Y.shape[0]-1)*T))
 
+@torch.jit.script
+def compute_hat_p_bb(Ys: torch.Tensor):
+    # find the value of $\hat p$ in eq. (9) on page 8
+    have_vals = torch.sum(~torch.isnan(Ys), (2,3))
+    
+    T = Ys.shape[-1]
+    
+    total_els = torch.numel(Ys[0, 0, :, :])
+    ps = torch.div(have_vals, total_els)
+
+    ns = torch.full(ps.size(), 1/((Ys.size(1) - 1)*T))
+    hat_ps = torch.maximum(ps, ns)
+    return hat_ps
 
 #@torch.no_grad()
 @torch.jit.script
 def compute_hat_p_b(Ys: torch.Tensor):
     # find the value of $\hat p$ in eq. (9) on page 8
     have_vals = torch.sum(~torch.isnan(Ys), (1,2))
-    
     T = Ys.size(2)
     
     total_els = torch.numel(Ys[0, :, :])
@@ -74,6 +86,23 @@ def get_ys_b(mat, treated_i: int):
     Y0 = torch.cat((mat[:treated_i, :], mat[treated_i+1:, :]), 0)
     Y1 = mat[treated_i, :]
     Y1 = Y1.view(1, Y1.size(0))
+    return Y0, Y1
+
+@torch.jit.script
+def get_ys_bb(mat: torch.Tensor, 
+              rows_idx: torch.Tensor,
+              other_idx: torch.Tensor):
+    # Split the tensor `mat` into two tensors, one containing the rows
+    # specified in `rows` and the other containing the remaining rows.
+    # The rows are placed in a new dimension at the front of the tensors.
+    Y1 = torch.index_select(mat, 0, rows_idx).view(rows_idx.shape[0], 1, 1, mat.shape[1])
+    Y0 = mat.unsqueeze(0).expand(rows_idx.shape[0], mat.shape[0], mat.shape[1])
+    Y0 = torch.masked_select(Y0, other_idx).view(rows_idx.shape[0], 
+                                                 mat.shape[0]-1, 
+                                                 mat.shape[1])
+    Y0 = Y0.unsqueeze(1)
+    assert Y0.shape[0] == Y1.shape[0]
+    assert Y0.dim() == 4 == Y1.dim()
     return Y0, Y1
 
 
@@ -151,10 +180,51 @@ def calc_rmspe(fact, control, preint):
     post = np.mean( (fact[preint:] - control[preint:])**2)
     return post/pre
 
+@torch.jit.script
+def get_M_hat_bb(
+                Ys: torch.Tensor,
+                mus: torch.Tensor,
+                denoise: bool = DEFAULT_DENOISE
+                ):
+    """
+    Returns the estimator of Y: M_hat
+    """
+    hat_p = compute_hat_p_bb(Ys)
+
+    # fill in missing values in Ys
+    Ys = torch.nan_to_num(Ys)
+
+    # compute the SVD of `Ys`
+    res = tsvd(Ys, full_matrices=True)
+
+    u,s,v = res.U, res.S, res.Vh
+
+    # Remove singular values that are below $\mu$
+    # by setting them to zero
+    
+    # Disable if denoise is False
+    if denoise:
+        s[s <= mus.unsqueeze(-1)] = 0.
+
+    # Make the singular values matrix
+    smat = torch.zeros_like(Ys)
+
+    b = torch.eye(s.shape[-1])
+    c = s.unsqueeze(s.dim()).expand(s.shape[0], s.shape[1], s.shape[2], s.shape[2])
+    smat[:, :, :c.shape[-1], :] = c * b
+
+    # build the estimator of Y
+    M_hat = u @ (smat @ v)
+    m = torch.permute((1/hat_p).repeat(M_hat.shape[-1], 1, 1, 1), (2, 3, 1, 0))
+    return m*M_hat
+
 
 #@torch.no_grad()
 @torch.jit.script
-def get_M_hat_b(Ys: torch.Tensor, mus: torch.Tensor, denoise: bool = DEFAULT_DENOISE):
+def get_M_hat_b(
+                Ys: torch.Tensor, 
+                mus: torch.Tensor, 
+                denoise: bool = DEFAULT_DENOISE):
     """
     Returns the estimator of Y: M_hat
     """
@@ -206,15 +276,15 @@ def estimate_weights_b(Y1: torch.Tensor, Y0: torch.Tensor, etas: torch.Tensor):
     
 
 #@torch.no_grad()
-@torch.jit.script
-def calc_control_b(Y1_t: torch.Tensor, Y0_t: torch.Tensor, 
-                   etas: torch.Tensor, a: float, b: float):
-    vs = estimate_weights_b(Y1_t, Y0_t, etas)
-    
-    Y1_hat = (Y0_t.mT@vs)
-    Y1_hat = unbind_data(Y1_hat, a, b)
-    Y0_t = unbind_data(Y0_t, a, b)
-    return Y1_hat, Y0_t, vs
+#@torch.jit.script
+#def calc_control_b(Y1_t: torch.Tensor, Y0_t: torch.Tensor, 
+#                   etas: torch.Tensor, a: float, b: float):
+#    vs = estimate_weights_b(Y1_t, Y0_t, etas)
+#    
+#    Y1_hat = (Y0_t.mT@vs)
+#    Y1_hat = unbind_data(Y1_hat, a, b)
+#    Y0_t = unbind_data(Y0_t, a, b)
+#    return Y1_hat, Y0_t, vs
 
 
 #@torch.no_grad()
@@ -223,14 +293,48 @@ def loss_fn(Y1s: torch.Tensor, Y1_hats: torch.Tensor):
     return torch.sum(torch.square(torch.sub(Y1s, Y1_hats)), 2)
 
 
-def prepare_data(orig_mat, treated_i, etas, mus, denoise=DEFAULT_DENOISE):
+def prepare_data_b( 
+                    orig_mat: torch.Tensor,
+                    rows: List,
+                    etas: torch.Tensor,
+                    mus: torch.Tensor,
+                    denoise: bool=DEFAULT_DENOISE
+                    ):
+    
+    combos_len = etas.shape[1]*mus.shape[1]
+    
+    etas = etas.repeat(1, mus.shape[-1]).unsqueeze(0)
+
+    bound_mat, a, b = bind_data_b(orig_mat)
+
+    rows_idx = torch.tensor(rows, device=orig_mat.device)
+    other_idx = torch.full_like(orig_mat, True, dtype=torch.bool)
+    other_idx = other_idx.unsqueeze(0).repeat(rows_idx.shape[0], 1, 1)
+    for i,row in enumerate(rows_idx):
+        other_idx[i, row.item(), :] = False
+    Y0, Y1 = get_ys_bb(bound_mat, rows_idx, other_idx)
+
+    y0 = Y0.repeat(1, mus.size(1), 1, 1) 
+
+    M_hat = get_M_hat_bb(y0, mus, denoise=denoise)
+    Y0_t = M_hat.repeat(1, etas.shape[-1]//mus.shape[-1], 1, 1)
+
+    Y1_t = Y1.expand(Y1.shape[0], etas.shape[-1], Y1.size(2), Y1.size(3))
+
+    etas = etas.permute(1, 2, 0)
+    return Y1_t, Y0_t, etas, a, b
+
+
+
+def prepare_data(orig_mat: torch.Tensor, 
+                 treated_i: int, 
+                 etas: List, 
+                 mus: torch.Tensor, 
+                 denoise: bool=DEFAULT_DENOISE):
     orig_tensor = torch.Tensor(orig_mat)
     
     batch_size = len(etas)*mus.size(0)
     etas_len = len(etas)
-
-    #mus = torch.Tensor(np.array(mus))
-    #mus = mus.reshape( (mus.size(0), 1))
 
     etas = torch.Tensor(np.array(etas))
     etas = etas.reshape( (etas.size(0), 1)).repeat(mus.size(0), 1)
@@ -239,9 +343,12 @@ def prepare_data(orig_mat, treated_i, etas, mus, denoise=DEFAULT_DENOISE):
     Y0, Y1 = get_ys_b(bound_mat, treated_i)
 
     y0 = Y0.repeat(mus.size(0),1,1)
-    Y0_t = get_M_hat_b(y0, mus, denoise=denoise).repeat(etas_len, 1, 1)
-    Y1_t = Y1.expand(batch_size, Y1.size(0), Y1.size(1))
 
+    M_hat = get_M_hat_b(y0, mus, denoise=denoise)
+    
+    Y0_t = M_hat.repeat(etas_len, 1, 1)
+
+    Y1_t = Y1.expand(batch_size, Y1.size(0), Y1.size(1))
     return Y1_t, Y0_t, etas, a, b
 
 
@@ -259,8 +366,8 @@ def _make_params(
         eta_n: int, 
         mu_n: int, 
         preint: Union[Literal[False], int], 
-        treated_i: Union[None, int] = None, 
-        parts: Union[None, int] = None) -> Tuple[List, torch.Tensor, int, int, bool]:
+        treated_i: Optional[int] = None, 
+        parts: Optional[int] = None) -> Tuple[List, torch.Tensor, int, int, bool]:
     """
     Prepares hyperparameters for the `get_control()` and `get_all_controls()`
     functions.
@@ -309,6 +416,42 @@ def _make_params(
 
     parts = 0 if not parts else parts
     denoise = bool(mu_n)
+    return etas, mus, cutoff, parts, denoise
+
+
+def _make_params_b(mat: np.ndarray,  
+        eta_n: int, 
+        mu_n: int, 
+        preint: Union[Literal[False], int], 
+        rows: Optional[List] = None, 
+        parts: Optional[int] = None) -> Tuple[torch.Tensor, torch.Tensor, int, int, bool]:
+    
+    # Generate `eta_n` $eta$ values for each row in `rows`
+    # convert to a torch.Tensor and 
+    # reshape it to (len(rows), eta_n)
+    etas = np.logspace(-2, 3, eta_n)
+    etas = torch.from_numpy(etas).unsqueeze(0).expand(len(rows), eta_n)
+
+    mus = np.array([0.5]*len(rows)).reshape((len(rows), 1))
+    if mu_n:
+        # Create a torch.Tensor of `mu_n` $mu$ values for each row in `rows`
+        # with shape (len(rows), mu_n)
+        mus = np.array([[compute_mu(mat, i, w=w) for w in np.linspace(0.1, 1., mu_n)] for i in rows])
+    mus = torch.from_numpy(mus)
+
+    # check that etas and mus have the same number of dimensions
+    assert etas.size(0) == mus.size(0), "etas and mus must have the same number of rows"
+
+    # check that dimension 0 of etas and mus are the same and are equal to len(rows)
+    assert etas.size(0) == mus.size(0) == len(rows), "etas and mus must have the same number of rows"
+    
+    cutoff = mat.shape[1]
+    if preint:
+        cutoff = preint
+    
+    parts = 0 if not parts else parts
+    denoise = bool(mu_n)
+    
     return etas, mus, cutoff, parts, denoise
 
 
@@ -370,31 +513,32 @@ def get_control(orig_mat, treated_i, eta_n=10, mu_n=DEFAULT_DENOISE,
     return Y1_hats[0], Y1s[0], vs[0]
 
 
-# A function to get controls for every row in the matrix
-def get_all_controls(orig_mat, eta_n=10, mu_n=DEFAULT_DENOISE, 
+# A function to get controls for a set of rows
+def get_controls(orig_mat, rows: Optional[List] = None, eta_n=10, mu_n=DEFAULT_DENOISE, 
         cuda=False, parts=DEFAULT_PART, preint=False, train: float = 1.):
     """
     Given the matrix of values 'orig_mat', computes synthetic 
-    controls for each row in the matrix, for each combination
-    of `eta` and `mu` for the respective numbers of `eta_n` and 
-    `mu_n`.
+    controls for all rows in `rows`. If `rows` is None, computes
+    synthetic controls for all rows in `orig_mat`.
     
-    Returns a tensor of dimensions `orig_mat.size()[0] by orig_mat.size()[1]` 
-    that contains the synthetic controls calculated with the best 
-    found values of parameters $eta$ and $mu$, and a tensor with the
-    same dimensions, containing the denoised original data for observation
-    `treated_i`.
+    Returns a tensor with dimensions `orig_mat.shape[0] by orig_mat.shape[0] by
+     orig_mat.shape[1]` that contains the synthetic controls calculated with the best 
+    found values of parameters $eta$ and $mu$ for each row, and a tensor with
+    the same dimensions as `orig_mat` containing the denoised original data.
     """
 
     # Compared to `get_control()`, this function adds a new batch dimension
     # that holds batches of rows from the original matrix. Each batch is
     # is a 3D tensor like the one used by `get_control()`.
-    etas, mus, cutoff, parts, denoise = _make_params(orig_mat, 
-                                                     treated_i, 
+    etas, mus, cutoff, parts, denoise = _make_params_b(orig_mat, 
                                                      eta_n, 
                                                      mu_n, 
-                                                     preint, 
-                                                     parts)
+                                                     preint=preint, 
+                                                     rows=rows,
+                                                     parts=parts,
+                                                     )
+    Y1_o, Y0_o, etas, a, b = prepare_data_b(torch.Tensor(orig_mat), rows, etas, mus, denoise=denoise)
+    
     
 
 
@@ -411,6 +555,8 @@ if __name__ == "__main__":
     eta_n = 10
     mu_n = 3
 
-    control, orig, v = get_control(price_mat, treated_i, eta_n, mu_n=False, cuda=False, 
+    #get_control(price_mat, treated_i, eta_n, mu_n=mu_n, cuda=False,)
+    
+    control, orig, v = get_controls(price_mat, [0,1], eta_n, mu_n=3, cuda=False, 
             parts=False, preint=90, train=0.79)
-    print (control/orig)
+    #print (control/orig)

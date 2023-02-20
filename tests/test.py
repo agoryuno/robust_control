@@ -26,7 +26,7 @@ class Test(unittest.TestCase):
         self.assertEqual(control.shape[1], 121)
         self.assertEqual(v.shape[0], 299)
         self.assertEqual(v.shape[1], 1)
-        
+
 
 
 if __name__ == '__main__':
