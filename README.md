@@ -30,12 +30,12 @@ The main entry point is the function `get_control(matrix, i, eta_n=10, mu_n=3, c
 - `i` is the row containing the object you want to estimate a synthetic control for,
 - `eta_n` - (optional, default is 10) the number of the ridge regression regularization parameter (often refered to also as $\alpha$ or $\lambda$) values to try, increasing this number may improve the fit but will make estimation take longer,
 - `mu_n` - (optional, default is 3) the number of $\mu$ values for the denoising phase to try, same rationale as with $\eta$ applies, except setting this to anything beyond 5 will be mostly useless,
-- cuda - (optional, default is False) set this to True to enable GPU acceleration, I find that CUDA provides a roughly two-fold increase in performance for a problem size of $K \times N \times \eta_N \times \mu_N \approx 1 000 000$ elements.
+- cuda - (optional, default is False) set this to True to enable GPU acceleration.
 
 The function returns a tuple with two $N \times 1$ vectors: the estimated synthetic control and the original denoised outcome values.
 
 ### Note on CUDA support:
 
 Unfortunately, PyTorch's implementation of SVD isn't fully parallelizable on CUDA, so running the
-estimation of the GPU will actually be slower than on the CPU. CUDA support is disabled by default
+estimation of the GPU may actually be slower than on the CPU (see this issue for details: https://github.com/pytorch/pytorch/issues/41306). For that reason CUDA support is disabled by default
 but remains an option for the future.
