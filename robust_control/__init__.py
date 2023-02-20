@@ -502,45 +502,46 @@ def get_control(orig_mat: torch.Tensor,
 
     Parameters:
     -----------
-    orig_mat: np.ndarray
+    `orig_mat`: np.ndarray
         The data matrix
 
-    treated_i: int
+    `treated_i`: int
         The index of the treated object (row)
     
-    eta_n: int
-        (Optional) The number of values of $eta$ to use
-    mu_n: Union[int, Literal[False]]
-        (Optional) The number of values of $mu$ to use (anything over 5 is useless, default is False
+    `eta_n`: int (optional)
+        The number of values of $eta$ to use
+
+    `mu_n`: Union[int, Literal[False]] (optional)
+        The number of values of $mu$ to use (anything over 5 is useless, default is False
         which means a single value))
     
-    cuda: bool
-        (Optional) Whether to use CUDA - CUDA support for SVD in PyTorch is limited so this is
+    `cuda`: bool (optional)
+        Whether to use CUDA - CUDA support for SVD in PyTorch is limited so this is
         best left at default value of False
     
-    parts: int
-        (Optional) The number of partitions to use for training or False to not use partitions
+    `parts`: int (optional)
+        The number of partitions to use for training or False to not use partitions
         (default is False)
     
-    preint: bool
-        (Optional) Number of pre-intervention periods to estimate the control on, if False
+    `preint`: bool (optional)
+        Number of pre-intervention periods to estimate the control on, if False
         uses all periods (default is False)
     
-    train: float
-        (Optional) The proportion of the data to use for training (default is 0.8)
+    `train`: float
+        The proportion of the data to use for training (default is 0.8)
     
     Returns:
     -----------
     
-    Y1_o: torch.Tensor
+    `Y1_o`: torch.Tensor
         A tensor of shape (orig_mat.shape[1], 1) containing the original data for 
         the treated object
     
-    Y0_o: torch.Tensor
+    `Y0_o`: torch.Tensor
         A tensor of shape (orig_mat.shape[1], 1) containing the synthetic control
         data
     
-    v: torch.Tensor
+    `v`: torch.Tensor
         A tensor of shape (orig_mat.shape[0]-1, 1) containing the weights of the synthetic control
     """
 
