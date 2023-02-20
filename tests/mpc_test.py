@@ -1,6 +1,7 @@
 import pickle
 import os
 import sys
+from time import time
 from multiprocessing import Pool
 
 # add the parent directory to the path
@@ -28,5 +29,8 @@ def run(args):
 
 
 if __name__ == "__main__":
+    
     args = make_arguments()
+    start = time()
     run(args)
+    print (time() - start)
