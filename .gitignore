@@ -2,3 +2,4 @@ robust_control/price_mat.pkl
 robust_control/__pycache__/*
 tests/__pycache__/*
 tests/price_mat.pkl
+robust_control/price_nan.pkl
