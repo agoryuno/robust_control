@@ -114,8 +114,7 @@ def get_ys_bb(mat: torch.Tensor,
 def get_ys(price_mat: torch.Tensor, treated_i:int):
     if isinstance(price_mat, np.ndarray):
         price_mat = torch.from_numpy(price_mat)
-    print (price_mat.shape)
-    Y0 = torch.cat((price_mat[...,:treated_i, :], price_mat[...,treated_i+1:, :]), 1)
+    Y0 = torch.cat((price_mat[..., :treated_i, :], price_mat[..., treated_i+1:, :]), -2)
     Y1 = price_mat[..., treated_i, :]
     Y1 = Y1.unsqueeze(-2)
     return Y0, Y1
@@ -655,15 +654,19 @@ def split(a, n):
 if __name__ == "__main__":
     import pickle
 
+    with open("price_nan.pkl", "rb") as f:
+        price_nan = pickle.load(f)
+
     with open("price_mat.pkl", "rb") as f:
         price_mat, _, _ = pickle.load(f)
+
 
     treated_i = 1
     eta_n = 10
     mu_n = 3
     #rows = [0,1]
     row_batches = split([i for i in range(price_mat.shape[0])], price_mat.shape[0]//25)
-    control, orig, v = get_controls(price_mat, [treated_i], eta_n, mu_n=mu_n, cuda=False,)
+    control, orig, v = get_control(price_mat, treated_i, eta_n, mu_n=mu_n, cuda=False,)
     #a = control/orig
     #from tqdm import tqdm 
     #for rows in tqdm(row_batches):
