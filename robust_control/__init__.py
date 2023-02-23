@@ -125,7 +125,9 @@ def compute_sigma(price_mat, treated_i, preint_len=None):
 
 def compute_mu(price_mat, treated_i, preint_len=None, w=None):
     preint_len = preint_len if preint_len else price_mat.shape[1]
+    print (type(price_mat))
     price_mat, _,_ = bind_data(price_mat)
+    print (type(price_mat))
     sigma = compute_sigma(price_mat, treated_i, preint_len)
     Y0, _ = get_ys(price_mat, treated_i)
     p = compute_hat_p(Y0)
