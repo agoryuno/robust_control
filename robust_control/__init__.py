@@ -234,7 +234,8 @@ def get_M_hat_bb(
 #@torch.no_grad()
 #@torch.jit.script
 def get_M_hat_b(
-                Ys: torch.Tensor, 
+                Ys: torch.Tensor,
+                treated_i: int,
                 mu_n: int
                 ):
     """
@@ -377,7 +378,7 @@ def prepare_data(orig_mat: torch.Tensor,
 
     y0 = Y0.repeat(mu_n,1,1)
 
-    M_hat = get_M_hat_b(y0, mu_n)
+    M_hat = get_M_hat_b(y0, treated_i, mu_n)
     
     Y0_t = M_hat.repeat(etas_len, 1, 1)
 
