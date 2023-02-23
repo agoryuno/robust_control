@@ -16,7 +16,11 @@ DEFAULT_DENOISE = 3
 #@torch.no_grad()
 @torch.jit.script
 def bind_data_b(X: torch.Tensor):
-    a, b = torch.min(X), torch.max(X)
+    X_min = torch.nan_to_num(X, nan=np.inf)
+    a = torch.min(X_min)
+    del X_min
+    X_max = torch.nan_to_num(X, nan=-np.inf)
+    b = torch.max(X_max)
     return (X - (a+b)/2.) / ((b-a)/2.), a, b
 
 
@@ -42,13 +46,13 @@ def get_mu_schedule(price_mat, treated_i):
     return sorted(s)
 
 
-def compute_hat_p(Y):
+def compute_hat_p(Y: torch.Tensor):
     # find the value of $\hat p$ in eq. (9) on page 8
-    have_vals = Y[~np.isnan(Y)].size
+    have_vals = Y[~np.isnan(Y)].dim()
     
     T = Y.shape[1]
     
-    p = have_vals/Y.size
+    p = have_vals/Y.dim()
     return np.maximum(p, 1/((Y.shape[0]-1)*T))
 
 @torch.jit.script
@@ -107,14 +111,19 @@ def get_ys_bb(mat: torch.Tensor,
     return Y0, Y1
 
 
-def get_ys(price_mat, treated_i):
-    Y0 = np.vstack((price_mat[:treated_i, :], price_mat[treated_i+1:, :]))
-    Y1 = price_mat[treated_i, :]
-    Y1 = np.reshape(Y1, (1, Y1.shape[0]))
+def get_ys(price_mat: torch.Tensor, treated_i:int):
+    if isinstance(price_mat, np.ndarray):
+        price_mat = torch.from_numpy(price_mat)
+    print (price_mat.shape)
+    Y0 = torch.cat((price_mat[...,:treated_i, :], price_mat[...,treated_i+1:, :]), 1)
+    Y1 = price_mat[..., treated_i, :]
+    Y1 = Y1.unsqueeze(-2)
     return Y0, Y1
 
 
 def compute_sigma(price_mat: torch.Tensor, treated_i, preint_len=None):
+    if isinstance(price_mat, np.ndarray):
+        price_mat = torch.from_numpy(price_mat)
     preint_len = preint_len if preint_len else price_mat.shape[1]
     Y_t = price_mat[treated_i, :preint_len]
     hat_Y = torch.mean(price_mat[:, :preint_len], axis=0)
@@ -438,7 +447,7 @@ def _make_params(
 
 def _make_params_b(mat: np.ndarray,  
         eta_n: int, 
-        mu_n: int, 
+        mu_n: int,
         preint: Union[Literal[False], int], 
         rows: Optional[List] = None, 
         parts: Optional[int] = None) -> Tuple[torch.Tensor, torch.Tensor, int, int, bool]:
@@ -537,11 +546,11 @@ def get_control(orig_mat: torch.Tensor,
         A tensor of shape (orig_mat.shape[0]-1, 1) containing the weights of the synthetic control
     """
 
-    etas, cutoff, parts = _make_params(orig_mat, 
-                                                     eta_n, 
-                                                     preint=preint, 
-                                                     parts=parts,
-                                                     treated_i=treated_i)
+    etas, cutoff, parts = _make_params(orig_mat,
+                                       eta_n,
+                                       preint=preint,
+                                       parts=parts,
+                                       treated_i=treated_i)
     
     Y1_o, Y0_o, etas, a, b = prepare_data(orig_mat, treated_i, etas, mu_n)
 
@@ -590,17 +599,17 @@ def get_controls(orig_mat, rows: Optional[List] = None, eta_n=10, mu_n=DEFAULT_D
     found values of parameters $eta$ and $mu$ for each row, and a tensor with
     the same dimensions as `orig_mat` containing the denoised original data.
     """
+    raise NotImplementedError("This function is currently disabled")
 
     # Compared to `get_control()`, this function adds a new batch dimension
     # that holds batches of rows from the original matrix. Each batch is
     # is a 3D tensor like the one used by `get_control()`.
-    etas, mus, cutoff, parts, denoise = _make_params_b(orig_mat, 
-                                                     eta_n, 
-                                                     mu_n, 
-                                                     preint=preint, 
-                                                     rows=rows,
-                                                     parts=parts,
-                                                     )
+    etas, cutoff, parts = _make_params_b(orig_mat, 
+                                         eta_n, 
+                                         preint=preint, 
+                                         rows=rows,
+                                         parts=parts
+                                         )
     Y1_o, Y0_o, etas, a, b = prepare_data_b(torch.Tensor(orig_mat), 
                                             rows, 
                                             etas, 
@@ -651,15 +660,15 @@ if __name__ == "__main__":
     with open("price_mat.pkl", "rb") as f:
         price_mat, _, _ = pickle.load(f)
 
-    treated_i = 0
+    treated_i = 1
     eta_n = 10
     mu_n = 3
     #rows = [0,1]
     row_batches = split([i for i in range(price_mat.shape[0])], price_mat.shape[0]//25)
-    #control, orig, v = get_control(price_mat, treated_i, eta_n, mu_n=mu_n, cuda=False,)
+    control, orig, v = get_controls(price_mat, [treated_i], eta_n, mu_n=mu_n, cuda=False,)
     #a = control/orig
-    from tqdm import tqdm 
-    for rows in tqdm(row_batches):
-        control, orig, v = get_controls(price_mat, rows, eta_n, mu_n=mu_n, cuda=False, 
-                parts=False, preint=90, train=0.79, double=True)
+    #from tqdm import tqdm 
+    #for rows in tqdm(row_batches):
+    #    control, orig, v = get_control(price_mat, treated_i, eta_n, mu_n=mu_n)
+    print (control/orig)
     #b = control[0]/orig[0]
