@@ -88,6 +88,7 @@ def get_ys_b(mat, treated_i: int):
     Y1 = Y1.view(1, Y1.size(0))
     return Y0, Y1
 
+
 @torch.jit.script
 def get_ys_bb(mat: torch.Tensor, 
               rows_idx: torch.Tensor,
@@ -125,9 +126,7 @@ def compute_sigma(price_mat, treated_i, preint_len=None):
 
 def compute_mu(price_mat, treated_i, preint_len=None, w=None):
     preint_len = preint_len if preint_len else price_mat.shape[1]
-    print (type(price_mat))
     price_mat, _,_ = bind_data(price_mat)
-    print (type(price_mat))
     sigma = compute_sigma(price_mat, treated_i, preint_len)
     Y0, _ = get_ys(price_mat, treated_i)
     p = compute_hat_p(Y0)
@@ -182,6 +181,7 @@ def calc_rmspe(fact, control, preint):
     post = np.mean( (fact[preint:] - control[preint:])**2)
     return post/pre
 
+
 @torch.jit.script
 def get_M_hat_bb(
                 Ys: torch.Tensor,
@@ -216,8 +216,6 @@ def get_M_hat_bb(
     c = s.unsqueeze(s.dim()).expand(s.shape[0], s.shape[1], s.shape[2], s.shape[2])
     smat[:, :, :c.shape[-1], :] = c * b
 
-    print (smat.shape)
-
     # build the estimator of Y
     M_hat = u @ (smat @ v)
     m = torch.permute((1/hat_p).repeat(M_hat.shape[-1], 1, 1, 1), (2, 3, 1, 0))
@@ -228,8 +226,8 @@ def get_M_hat_bb(
 @torch.jit.script
 def get_M_hat_b(
                 Ys: torch.Tensor, 
-                mus: torch.Tensor, 
-                denoise: bool = DEFAULT_DENOISE):
+                mu_n: int
+                ):
     """
     Returns the estimator of Y: M_hat
     """
@@ -246,8 +244,15 @@ def get_M_hat_b(
     # Remove singular values that are below $\mu$
     # by setting them to zero
     
-    # Disable if denoise is False
-    if denoise:
+    mus = [0.5]
+    if mu_n:
+        mus = [compute_mu(Ys, treated_i, w=w) 
+            for w in np.linspace(0.1, 1., mu_n)]
+
+    mus = torch.from_numpy(np.array(mus)).unsqueeze(1)
+
+    # Disable if mu_n is False
+    if mu_n:
         s[s <= mus] = 0.
 
     # Make the singular values matrix
@@ -302,17 +307,6 @@ def estimate_weights_bb(Y1: torch.Tensor,
     result = U @ D @ Vh @ Y1.mT
     return result
 
-#@torch.no_grad()
-#@torch.jit.script
-#def calc_control_b(Y1_t: torch.Tensor, Y0_t: torch.Tensor, 
-#                   etas: torch.Tensor, a: float, b: float):
-#    vs = estimate_weights_b(Y1_t, Y0_t, etas)
-#    
-#    Y1_hat = (Y0_t.mT@vs)
-#    Y1_hat = unbind_data(Y1_hat, a, b)
-#    Y0_t = unbind_data(Y0_t, a, b)
-#    return Y1_hat, Y0_t, vs
-
 
 #@torch.no_grad()
 torch.jit.script
@@ -357,26 +351,24 @@ def prepare_data_b(
     return Y1_t, Y0_t, etas, a, b
 
 
-
 def prepare_data(orig_mat: torch.Tensor, 
                  treated_i: int, 
                  etas: List, 
-                 mus: torch.Tensor, 
-                 denoise: bool=DEFAULT_DENOISE):
+                 mu_n: int):
     orig_tensor = torch.Tensor(orig_mat)
     
-    batch_size = len(etas)*mus.size(0)
+    batch_size = len(etas)*mu_n
     etas_len = len(etas)
 
     etas = torch.Tensor(np.array(etas))
-    etas = etas.reshape( (etas.size(0), 1)).repeat(mus.size(0), 1)
+    etas = etas.reshape( (etas.size(0), 1)).repeat(mu_n, 1)
     
     bound_mat, a, b = bind_data_b(orig_tensor)
     Y0, Y1 = get_ys_b(bound_mat, treated_i)
 
-    y0 = Y0.repeat(mus.size(0),1,1)
+    y0 = Y0.repeat(mu_n,1,1)
 
-    M_hat = get_M_hat_b(y0, mus, denoise=denoise)
+    M_hat = get_M_hat_b(y0, mu_n)
     
     Y0_t = M_hat.repeat(etas_len, 1, 1)
 
@@ -396,7 +388,6 @@ def _get_train_data(Y1_o, Y0_o, cutoff: int, parts: int):
 def _make_params(
         mat: np.ndarray,  
         eta_n: int, 
-        mu_n: int, 
         preint: Union[Literal[False], int], 
         treated_i: Optional[int] = None, 
         parts: Optional[int] = None) -> Tuple[List, torch.Tensor, int, int, bool]:
@@ -435,20 +426,14 @@ def _make_params(
     """
 
     etas = np.logspace(-2, 3, eta_n).tolist()
-    mus = [0.5]
-    if mu_n:
-        mus = [compute_mu(mat, treated_i, w=w) 
-            for w in np.linspace(0.1, 1., mu_n)]
-
-    mus = torch.from_numpy(np.array(mus)).unsqueeze(1)
+    
 
     cutoff = mat.shape[1]
     if preint:
         cutoff = preint
 
     parts = 0 if not parts else parts
-    denoise = bool(mu_n)
-    return etas, mus, cutoff, parts, denoise
+    return etas, cutoff, parts
 
 
 def _make_params_b(mat: np.ndarray,  
@@ -552,14 +537,13 @@ def get_control(orig_mat: torch.Tensor,
         A tensor of shape (orig_mat.shape[0]-1, 1) containing the weights of the synthetic control
     """
 
-    etas, mus, cutoff, parts, denoise = _make_params(orig_mat, 
+    etas, cutoff, parts = _make_params(orig_mat, 
                                                      eta_n, 
-                                                     mu_n, 
                                                      preint=preint, 
                                                      parts=parts,
                                                      treated_i=treated_i)
     
-    Y1_o, Y0_o, etas, a, b = prepare_data(orig_mat, treated_i, etas, mus, denoise=denoise)
+    Y1_o, Y0_o, etas, a, b = prepare_data(orig_mat, treated_i, etas, mu_n)
 
 
     if cuda:
@@ -679,6 +663,3 @@ if __name__ == "__main__":
         control, orig, v = get_controls(price_mat, rows, eta_n, mu_n=mu_n, cuda=False, 
                 parts=False, preint=90, train=0.79, double=True)
     #b = control[0]/orig[0]
-
-    #print (a)
-    #print (b)
