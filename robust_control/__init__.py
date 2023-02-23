@@ -20,8 +20,8 @@ def bind_data_b(X: torch.Tensor):
     return (X - (a+b)/2.) / ((b-a)/2.), a, b
 
 
-def bind_data(X):
-    a, b = np.nanmin(X), np.nanmax(X)
+def bind_data(X: torch.Tensor):
+    a, b = X.min(), X.max()
     return (X - (a+b)/2.) / ((b-a)/2.), a, b
 
 
@@ -114,12 +114,12 @@ def get_ys(price_mat, treated_i):
     return Y0, Y1
 
 
-def compute_sigma(price_mat, treated_i, preint_len=None):
+def compute_sigma(price_mat: torch.Tensor, treated_i, preint_len=None):
     preint_len = preint_len if preint_len else price_mat.shape[1]
     Y_t = price_mat[treated_i, :preint_len]
-    hat_Y = np.mean(price_mat[:, :preint_len], axis=0)
+    hat_Y = torch.mean(price_mat[:, :preint_len], axis=0)
     a = (1./(preint_len-1)) 
-    b = np.sum((Y_t - hat_Y)**2)
+    b = torch.sum((Y_t - hat_Y)**2)
     
     return a*b
 
@@ -223,7 +223,7 @@ def get_M_hat_bb(
 
 
 #@torch.no_grad()
-@torch.jit.script
+#@torch.jit.script
 def get_M_hat_b(
                 Ys: torch.Tensor, 
                 mu_n: int
