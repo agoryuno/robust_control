@@ -125,8 +125,8 @@ def compute_sigma(price_mat: torch.Tensor, treated_i, preint_len=None):
     if isinstance(price_mat, np.ndarray):
         price_mat = torch.from_numpy(price_mat)
     preint_len = preint_len if preint_len else price_mat.shape[1]
-    Y_t = price_mat[treated_i, :preint_len]
-    hat_Y = torch.mean(price_mat[:, :preint_len], axis=0)
+    Y_t = price_mat[..., treated_i, :preint_len]
+    hat_Y = torch.mean(price_mat[..., :, :preint_len], axis=0)
     a = (1./(preint_len-1)) 
     b = torch.sum((Y_t - hat_Y)**2)
     
@@ -235,8 +235,7 @@ def get_M_hat_bb(
 #@torch.jit.script
 def get_M_hat_b(
                 Ys: torch.Tensor,
-                treated_i: int,
-                mu_n: int
+                mus: torch.Tensor
                 ):
     """
     Returns the estimator of Y: M_hat
@@ -253,17 +252,8 @@ def get_M_hat_b(
 
     # Remove singular values that are below $\mu$
     # by setting them to zero
-    
-    mus = [0.5]
-    if mu_n:
-        mus = [compute_mu(Ys, treated_i, w=w) 
-            for w in np.linspace(0.1, 1., mu_n)]
 
-    mus = torch.from_numpy(np.array(mus)).unsqueeze(1)
-
-    # Disable if mu_n is False
-    if mu_n:
-        s[s <= mus] = 0.
+    s[s <= mus] = 0.
 
     # Make the singular values matrix
     smat = torch.zeros_like(Ys)
@@ -378,7 +368,14 @@ def prepare_data(orig_mat: torch.Tensor,
 
     y0 = Y0.repeat(mu_n,1,1)
 
-    M_hat = get_M_hat_b(y0, treated_i, mu_n)
+    mus = [0.5]
+    if mu_n:
+        mus = [compute_mu(bound_mat, treated_i, w=w) 
+            for w in np.linspace(0.1, 1., mu_n)]
+
+    mus = torch.from_numpy(np.array(mus)).unsqueeze(1)
+
+    M_hat = get_M_hat_b(y0, mus)
     
     Y0_t = M_hat.repeat(etas_len, 1, 1)
 
