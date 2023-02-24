@@ -212,10 +212,7 @@ def get_M_hat_bb(
     # Remove singular values that are below $\mu$
     # by setting them to zero
     
-    # Disable if denoise is False
-    if denoise:
-        print("Denoising is enabled")
-        s[s <= mus.unsqueeze(-1)] = 0.
+    s[s <= mus.unsqueeze(-1)] = 0.
 
 
     # Make the singular values matrix
@@ -317,19 +314,28 @@ def prepare_data_b(
                     orig_mat: torch.Tensor,
                     rows: List,
                     etas: torch.Tensor,
-                    mus: torch.Tensor,
-                    denoise: bool=DEFAULT_DENOISE,
+                    mu_n: int,
                     double: bool = False
                     ):
     
     if double:
         orig_mat = orig_mat.double()
-        etas = etas.double()
-        mus = mus.double()
+        
+    bound_mat, a, b = bind_data_b(orig_mat)
+
+    mus = np.array([0.5]*len(rows)).reshape((len(rows), 1))
+    if mu_n:
+        # Create a torch.Tensor of `mu_n` $mu$ values for each row in `rows`
+        # with shape (len(rows), mu_n)
+        mus = np.array([[compute_mu(bound_mat, i, w=w) 
+                         for w in np.linspace(0.1, 1., mu_n)] for i in rows])
+    mus = torch.from_numpy(mus)
 
     etas = etas.repeat(1, mus.shape[-1]).unsqueeze(0)
-    
-    bound_mat, a, b = bind_data_b(orig_mat)
+
+    if double:
+        etas = etas.double()
+        mus = mus.double()
 
     rows_idx = torch.tensor(rows, device=orig_mat.device)
     other_idx = torch.full_like(orig_mat, True, dtype=torch.bool)
@@ -340,7 +346,9 @@ def prepare_data_b(
 
     y0 = Y0.repeat(1, mus.size(1), 1, 1) 
 
-    M_hat = get_M_hat_bb(y0, mus, denoise=denoise)
+    
+
+    M_hat = get_M_hat_bb(y0, mus)
     
     Y0_t = M_hat.repeat(1, etas.shape[-1]//mus.shape[-1], 1, 1)
 
@@ -444,7 +452,6 @@ def _make_params(
 
 def _make_params_b(mat: np.ndarray,  
         eta_n: int, 
-        mu_n: int,
         preint: Union[Literal[False], int], 
         rows: Optional[List] = None, 
         parts: Optional[int] = None) -> Tuple[torch.Tensor, torch.Tensor, int, int, bool]:
@@ -455,27 +462,13 @@ def _make_params_b(mat: np.ndarray,
     etas = np.logspace(-2, 3, eta_n)
     etas = torch.from_numpy(etas).unsqueeze(0).expand(len(rows), eta_n).type(torch.float32)
 
-    mus = np.array([0.5]*len(rows)).reshape((len(rows), 1))
-    if mu_n:
-        # Create a torch.Tensor of `mu_n` $mu$ values for each row in `rows`
-        # with shape (len(rows), mu_n)
-        mus = np.array([[compute_mu(mat, i, w=w) for w in np.linspace(0.1, 1., mu_n)] for i in rows])
-    mus = torch.from_numpy(mus)
-
-    # check that etas and mus have the same number of dimensions
-    assert etas.size(0) == mus.size(0), "etas and mus must have the same number of rows"
-
-    # check that dimension 0 of etas and mus are the same and are equal to len(rows)
-    assert etas.size(0) == mus.size(0) == len(rows), "etas and mus must have the same number of rows"
-    
     cutoff = mat.shape[1]
     if preint:
         cutoff = preint
     
     parts = 0 if not parts else parts
-    denoise = bool(mu_n)
     
-    return etas, mus, cutoff, parts, denoise
+    return etas, cutoff, parts
 
 
 def get_control(orig_mat: torch.Tensor, 
@@ -596,7 +589,7 @@ def get_controls(orig_mat, rows: Optional[List] = None, eta_n=10, mu_n=DEFAULT_D
     found values of parameters $eta$ and $mu$ for each row, and a tensor with
     the same dimensions as `orig_mat` containing the denoised original data.
     """
-    raise NotImplementedError("This function is currently disabled")
+    #raise NotImplementedError("This function is currently disabled")
 
     # Compared to `get_control()`, this function adds a new batch dimension
     # that holds batches of rows from the original matrix. Each batch is
@@ -610,8 +603,7 @@ def get_controls(orig_mat, rows: Optional[List] = None, eta_n=10, mu_n=DEFAULT_D
     Y1_o, Y0_o, etas, a, b = prepare_data_b(torch.Tensor(orig_mat), 
                                             rows, 
                                             etas, 
-                                            mus, 
-                                            denoise=denoise,
+                                            mu_n, 
                                             double=double)
     
     if cuda:
@@ -666,7 +658,11 @@ if __name__ == "__main__":
     mu_n = 3
     #rows = [0,1]
     row_batches = split([i for i in range(price_mat.shape[0])], price_mat.shape[0]//25)
-    control, orig, v = get_control(price_mat, treated_i, eta_n, mu_n=mu_n, cuda=False,)
+    control, orig, v = get_controls(price_mat, 
+                                    [i for i in range(price_mat.shape[0] // 10)], 
+                                    eta_n, 
+                                    mu_n=mu_n, 
+                                    cuda=False,)
     #a = control/orig
     #from tqdm import tqdm 
     #for rows in tqdm(row_batches):
