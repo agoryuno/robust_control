@@ -589,7 +589,7 @@ def get_controls(orig_mat, rows: Optional[List] = None, eta_n=10, mu_n=DEFAULT_D
     found values of parameters $eta$ and $mu$ for each row, and a tensor with
     the same dimensions as `orig_mat` containing the denoised original data.
     """
-    #raise NotImplementedError("This function is currently disabled")
+    raise NotImplementedError("This function is currently disabled")
 
     # Compared to `get_control()`, this function adds a new batch dimension
     # that holds batches of rows from the original matrix. Each batch is
@@ -657,7 +657,7 @@ if __name__ == "__main__":
     eta_n = 10
     mu_n = 3
     #rows = [0,1]
-    row_batches = split([i for i in range(price_mat.shape[0])], price_mat.shape[0]//10)
+    """row_batches = split([i for i in range(price_mat.shape[0])], price_mat.shape[0]//10)
     from tqdm import tqdm 
 
     for rows in tqdm(row_batches):
@@ -668,4 +668,4 @@ if __name__ == "__main__":
                                     mu_n=mu_n, 
                                     cuda=False,)
     print (control/orig)
-    #b = control[0]/orig[0]
+    #b = control[0]/orig[0]"""
