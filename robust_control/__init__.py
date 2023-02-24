@@ -657,15 +657,15 @@ if __name__ == "__main__":
     eta_n = 10
     mu_n = 3
     #rows = [0,1]
-    row_batches = split([i for i in range(price_mat.shape[0])], price_mat.shape[0]//25)
-    control, orig, v = get_controls(price_mat, 
-                                    [i for i in range(price_mat.shape[0] // 10)], 
+    row_batches = split([i for i in range(price_mat.shape[0])], price_mat.shape[0]//10)
+    from tqdm import tqdm 
+
+    for rows in tqdm(row_batches):
+        control, orig, v = get_controls(price_mat[:, :45], 
+                                    rows, 
                                     eta_n, 
+                                    preint=35,
                                     mu_n=mu_n, 
                                     cuda=False,)
-    #a = control/orig
-    #from tqdm import tqdm 
-    #for rows in tqdm(row_batches):
-    #    control, orig, v = get_control(price_mat, treated_i, eta_n, mu_n=mu_n)
     print (control/orig)
     #b = control[0]/orig[0]
