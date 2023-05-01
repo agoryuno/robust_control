@@ -3,7 +3,7 @@
 A PyTorch implementation of the "robust" synthetic control model proposed by Amjad, Shah and Shen \[[arxiv](https://arxiv.org/abs/1711.06940)\].
 
 The robust synthetic control is an extension of the original synthetic control model, proposed by Abadie, Diamond and Hainmueller (for overview see:
-https://www.aeaweb.org/articles?id=10.1257/jel.20191450). The synthetic control method is a causal inference method that uses a panel of data to estimate the effect of an intervention on one memeber
+https://www.aeaweb.org/articles?id=10.1257/jel.20191450). The synthetic control method is a causal inference method that uses a panel of data to estimate the effect of an intervention on one member
 of that panel. The synthetic control for a "treated" object is constructed as a weighted average of
 all other objects in the panel, with weights estimated controling for relevant covariates. The robust model is an extension of the original model that doesn't use covariates and instead fits
 the weights based on the data itself. It tries to find the weights that minimize the difference between the outcomes for the treated object and the synthetic control in the pretreatment period.
