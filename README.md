@@ -32,61 +32,86 @@ and returns the timeseries for the synthetic control, original data passed throu
 ## Function `get_control()`
 
 Given the matrix of values 'orig_mat' and the row index 
-'treated_i', computes synthetic controls for each combination
-of `eta` and `mu` for the respective numbers of `eta_n` and 
-`mu_n`.
+    'treated_i', computes synthetic controls for each combination
+    of `eta` and `mu` for the respective numbers of `eta_n` and 
+    `mu_n`.
+    
+    Returns a tensor of dimensions `orig_mat.size()[1] by 1` 
+    that contains the synthetic control calculated with the best 
+    found values of parameters $eta$ and $mu$, and a tensor with the
+    same dimensions, containing the denoised original data for observation
+    `treated_i`.
 
-Returns a tensor of dimensions `orig_mat.size()[1] by 1` 
-that contains the synthetic control calculated with the best 
-found values of parameters $eta$ and $mu$, and a tensor with the
-same dimensions, containing the denoised original data for observation
-`treated_i`.
+    Parameters:
+    -----------
+    `orig_mat`: np.ndarray
+        The data matrix
 
-Parameters:
------------
+    `treated_i`: int
+        The index of the treated object (row)
+    
+    `eta_n`: int (optional)
+        The number of values of $eta$ to use
 
-`orig_mat`: np.ndarray
-    The data matrix
+    `mu_n`: Union[int, Literal[False]] (optional)
+        The number of values of $mu$ to use (anything over 5 is useless, default is False
+        which means a single value))
+    
+    `cuda`: bool (optional)
+        Whether to use CUDA - CUDA support for SVD in PyTorch is limited so this is
+        best left at default value of False
+    
+    `parts`: int (optional)
+        The number of partitions to use for training or False to not use partitions
+        (default is False)
+    
+    `preint`: bool (optional)
+        Number of pre-intervention periods to estimate the control on, if False - uses 
+        all periods (default is False)
+    
+    `train`: float (optional)
+        The proportion of the data to use for training (default is 0.8)
+    
+    Returns:
+    -----------
+    
+    `Y1_c`: torch.Tensor
+        A tensor of shape (orig_mat.shape[1], 1) containing the synthetic control data for 
+        the treated object
+    
+    `Y0_o`: torch.Tensor
+        A tensor of shape (orig_mat.shape[1], 1) containing the original
+        data
+    
+    `v`: torch.Tensor
+        A tensor of shape (orig_mat.shape[0]-1, 1) containing the weights of the synthetic control.
+        Keep in mind that these weights are calculated for "normalized" data, so applying them
+        to untransformed original data will yield incorrect results. See next for an example.
+        of using the weights to calculate the synthetic control.
 
-`treated_i`: int
-    The index of the treated object (row)
 
-`eta_n`: int (optional)
-    The number of values of $eta$ to use
+    ## Using the weights:
 
-`mu_n`: Union[int, Literal[False]] (optional)
-    The number of values of $mu$ to use (anything over 5 is useless, default is 3.
-    Setting this to False disables denoising entirely.
+    This is an example of using the `v` matrix of weights returned by the `get_control()`
+    function. Assuming that your original data is in `data` and the index of the treated
+    object is `treated_i`:
 
-`cuda`: bool (optional)
-    Whether to use CUDA - CUDA support for SVD in PyTorch is limited so this is
-    best left at default value of False
+    ```python
+    from robust_control import get_control, bind_data_b, unbind_data
 
-`parts`: int (optional)
-    The number of partitions to use for training or False to not use partitions
-    (default is False)
+    # Calculate the synthetic control
+    Y1_c, Y0_o, v = get_control(data, treated_i)
 
-`preint`: bool (optional)
-    Number of pre-intervention periods to estimate the control on, if False
-    uses all periods (default is False)
+    # Bind the data for untreated objects
+    dat, a, b = bind_data_b(torch.concat ((data[:treated_i], data[treated_i+1:])))
 
-`train`: float (optional)
-    The proportion of the data to use for training (default is 0.8)
+    # Apply the weights to `dat`
+    control = dat.T @ v
 
-Returns:
------------
-
-`Y1_o`: torch.Tensor
-    A tensor of shape (orig_mat.shape[1], 1) containing the original data for 
-    the treated object
-
-`Y0_o`: torch.Tensor
-    A tensor of shape (orig_mat.shape[1], 1) containing the synthetic control
-    data
-
-`v`: torch.Tensor
-    A tensor of shape (orig_mat.shape[0]-1, 1) containing the weights of the synthetic control
-
+    # Unbind the data to bring it back to the original scale
+    control = unbind_data(control, a, b)
+    
+    ```
 
 ### Note on CUDA and performance:
 

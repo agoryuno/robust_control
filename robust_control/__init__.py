@@ -524,16 +524,44 @@ def get_control(orig_mat: torch.Tensor,
     Returns:
     -----------
     
-    `Y1_o`: torch.Tensor
-        A tensor of shape (orig_mat.shape[1], 1) containing the original data for 
+    `Y1_c`: torch.Tensor
+        A tensor of shape (orig_mat.shape[1], 1) containing the synthetic control data for 
         the treated object
     
     `Y0_o`: torch.Tensor
-        A tensor of shape (orig_mat.shape[1], 1) containing the synthetic control
+        A tensor of shape (orig_mat.shape[1], 1) containing the original
         data
     
     `v`: torch.Tensor
-        A tensor of shape (orig_mat.shape[0]-1, 1) containing the weights of the synthetic control
+        A tensor of shape (orig_mat.shape[0]-1, 1) containing the weights of the synthetic control.
+        Keep in mind that these weights are calculated for "normalized" data, so applying them
+        to untransformed original data will yield incorrect results. See next for an example.
+        of using the weights to calculate the synthetic control.
+
+
+    Using the weights:
+    ------------------
+
+    This is an example of using the `v` matrix of weights returned by the `get_control()`
+    function. Assuming that your original data is in `data` and the index of the treated
+    object is `treated_i`:
+
+    ```python
+    from robust_control import get_control, bind_data_b, unbind_data
+
+    # Calculate the synthetic control
+    Y1_c, Y0_o, v = get_control(data, treated_i)
+
+    # Bind the data for untreated objects
+    dat, a, b = bind_data_b(torch.concat ((data[:treated_i], data[treated_i+1:])))
+
+    # Apply the weights to `dat`
+    control = dat.T @ v
+
+    # Unbind the data to bring it back to the original scale
+    control = unbind_data(control, a, b)
+    
+    ```
     """
 
     etas, cutoff, parts = _make_params(orig_mat,
