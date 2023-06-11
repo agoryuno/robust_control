@@ -535,7 +535,7 @@ def get_control(orig_mat: torch.Tensor,
     `v`: torch.Tensor
         A tensor of shape (orig_mat.shape[0]-1, 1) containing the weights of the synthetic control.
         Keep in mind that these weights are calculated for "normalized" data, so applying them
-        to untransformed original data will yield incorrect results. See next for an example.
+        to untransformed original data will yield incorrect results. See next for an example
         of using the weights to calculate the synthetic control.
 
 
