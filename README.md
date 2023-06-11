@@ -31,8 +31,8 @@ and returns the timeseries for the synthetic control, original data passed throu
 
 ## Function `get_control()`
 
-Given the matrix of values 'orig_mat' and the row index 
-'treated_i', computes synthetic controls for each combination
+Given the matrix of values `orig_mat` and the row index 
+`treated_i`, computes synthetic controls for each combination
 of `eta` and `mu` for the respective numbers of `eta_n` and 
 `mu_n`.
 
@@ -55,7 +55,7 @@ Parameters:
 
 `mu_n`: Union[int, Literal[False]] (optional)
     The number of values of $mu$ to use (anything over 5 is useless, default is False
-    which means a single value))
+    which means a single value)
 
 `cuda`: bool (optional)
     Whether to use CUDA - CUDA support for SVD in PyTorch is limited so this is
@@ -93,17 +93,17 @@ Returns:
 ## Using the weights:
 
 This is an example of using the `v` matrix of weights returned by the `get_control()`
-function. Assuming that your original data is in `data` and the index of the treated
+function. Assuming that your original data is in `orig_mat` and the index of the treated
 object is `treated_i`:
 
 ```python
 from robust_control import get_control, bind_data_b, unbind_data
 
 # Calculate the synthetic control
-Y1_c, Y0_o, v = get_control(data, treated_i)
+Y1_c, Y0_o, v = get_control(orig_mat, treated_i)
 
 # Bind the data for untreated objects
-dat, a, b = bind_data_b(torch.concat ((data[:treated_i], data[treated_i+1:])))
+dat, a, b = bind_data_b(torch.concat ((orig_mat[:treated_i], orig_mat[treated_i+1:])))
 
 # Apply the weights to `dat`
 control = dat.T @ v

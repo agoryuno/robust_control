@@ -543,17 +543,17 @@ def get_control(orig_mat: torch.Tensor,
     ------------------
 
     This is an example of using the `v` matrix of weights returned by the `get_control()`
-    function. Assuming that your original data is in `data` and the index of the treated
+    function. Assuming that your original data is in `orig_mat` and the index of the treated
     object is `treated_i`:
 
     ```python
     from robust_control import get_control, bind_data_b, unbind_data
 
     # Calculate the synthetic control
-    Y1_c, Y0_o, v = get_control(data, treated_i)
+    Y1_c, Y0_o, v = get_control(orig_mat, treated_i)
 
     # Bind the data for untreated objects
-    dat, a, b = bind_data_b(torch.concat ((data[:treated_i], data[treated_i+1:])))
+    dat, a, b = bind_data_b(torch.concat ((orig_mat[:treated_i], orig_mat[treated_i+1:])))
 
     # Apply the weights to `dat`
     control = dat.T @ v
